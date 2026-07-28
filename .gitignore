@@ -1,0 +1,6 @@
+dist/
+.self-audit/
+__pycache__/
+*.pyc
+*.bak
+.DS_Store

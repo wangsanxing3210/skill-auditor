@@ -1,0 +1,11 @@
+{
+  "model": "glm-5.1",
+  "provider": "workbuddy",
+  "temperature": 0.2,
+  "max_tokens": 4096,
+  "notes": "供 agent 在执行 skill_tester 生成的 manual 用例时读取；脚本本身仅校验本文件为合法 JSON 并透传，真实模型调用由 agent 侧完成。",
+  "execution": {
+    "strategy": "reason-over-instructions",
+    "per_case": "读取 testplan.json 中对应 TC-xxx 的 prompt/expected，调用目标技能或依据其指令推理，写出 status(pass|fail) + evidence，再 skill_tester.py --merge-results 合并"
+  }
+}

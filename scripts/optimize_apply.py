@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""optimize_apply.py — apply safe optimizations and emit before/after diff.
+
+Maps audit/semantic findings to optimization strategies and applies *reversible*
+transformations by default. Aggressive strategies run only with --aggressive AND
+config.strategies.allow_aggressive. Always writes a unified diff + report so changes
+are reviewable.
+
+Usage:
+  python3 optimize_apply.py <target> --findings findings.json [--dry-run]
+         [--aggressive] [--out report.md] [--config config.json]
+"""
+import os
+import sys
+import re
+import json
+import argparse
+import difflib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _common as C
+
+STRATEGY_TABLE = {
+    "OPT-FRONTMATTER": {"rules": ["STRUCT-001", "STRUCT-002", "STRUCT-003", "STRUCT-004"], "risk": "safe"},
+    "OPT-DEDUP-BLOCK": {"rules": ["EFF-001", "SEM-001", "SEM-002"], "risk": "safe"},
+    "OPT-TERM-UNIFY": {"rules": ["SEM-003"], "risk": "safe"},
+    "OPT-DEADREF-FIX": {"rules": ["STRUCT-007", "STRUCT-008", "STRUCT-009", "EFF-003"], "risk": "safe"},
+    "OPT-PHRASE-NORMALIZE": {"rules": ["PROMPT-006", "PROMPT-009"], "risk": "safe"},
+    "OPT-REWRITE-CONFLICT": {"rules": ["SEM-004"], "risk": "aggressive"},
+    "OPT-RESTRUCTURE": {"rules": ["PROMPT-004", "EFF-005"], "risk": "aggressive"},
+}
+RULE_TO_STRATEGY = {}
+for sid, info in STRATEGY_TABLE.items():
+    for r in info["rules"]:
+        RULE_TO_STRATEGY[r] = sid
+
+DEFAULT_TERM_CLUSTERS = {
+    "Skill": ["Skill", "skill", "技能", "这个技能"],
+    "WorkBuddy": ["WorkBuddy", "workbuddy", "助手"],
+    "frontmatter": ["frontmatter", "前置元数据", "YAML头", "yaml头"],
+}
+PHRASE_MAP = [(r"100\s*%", "尽可能高"), (r"永远", "通常"), (r"绝对", "尽量")]
+
+
+def build_term_suggestions(raw):
+    """Language-aware term unification: only unify within the same script, and never
+    cross languages (so '技能' is never rewritten to 'skill')."""
+    sug = {}
+    for _canon, variants in DEFAULT_TERM_CLUSTERS.items():
+        groups = {"ascii": [], "cjk": []}
+        for v in variants:
+            if re.search(r"[一-鿿]", v):
+                groups["cjk"].append(v)
+            else:
+                groups["ascii"].append(v)
+        for grp in groups.values():
+            if len(grp) < 2:
+                continue
+            best = max(grp, key=lambda v: raw.count(v))
+            if raw.count(best) == 0:
+                continue
+            for v in grp:
+                if v != best and raw.count(v) > 0:
+                    sug[v] = best
+    return sug
+
+
+def safe_replace(text, variant, canon):
+    """Replace variant with canon. ASCII: word-boundary safe (won't touch
+    'skill-auditor' or 'SKILL.md'). Protection: never rewrite inside a Markdown
+    heading line, and never lowercase a word that begins a sentence/line (so
+    '# Skill Auditor' and 'A Skill that…' stay capitalized). CJK: substring replace."""
+    if re.search(r"[a-z]", variant):
+        pat = r"(?<![\w./-])" + re.escape(variant) + r"(?![\w./-])"
+        changed = 0
+        skipped = 0
+        lowers = bool(variant[:1].isupper() and canon[:1].islower())
+
+        def repl(m):
+            nonlocal changed, skipped
+            s = m.start()
+            # 1) heading protection: the line this match lives on starts with '#'
+            ls = text.rfind("\n", 0, s) + 1
+            if text[ls:ls + 1] == "#":
+                skipped += 1
+                return m.group(0)
+            # 2) sentence/line-initial protection: don't lowercase a capitalized first word
+            if lowers:
+                prev = text[s - 1] if s > 0 else ""
+                prev2 = text[s - 2] if s > 1 else ""
+                is_initial = (s == 0) or (prev in ".!?。！？\n") or \
+                             (prev in " \t" and prev2 in ".!?。！？\n")
+                # line-initial: nothing before the match except bullet/quote/number markers
+                if not is_initial:
+                    lead = text[ls:s]
+                    lead_core = re.sub(r"^[\s>\*\+\-]+", "", lead)
+                    lead_core = re.sub(r"^\d+\.\s*", "", lead_core)
+                    is_initial = (lead_core.strip() == "")
+                if is_initial:
+                    skipped += 1
+                    return m.group(0)
+            changed += 1
+            return canon
+
+        new = re.sub(pat, repl, text, flags=re.I)
+        return new, changed, skipped
+    cnt = text.count(variant)
+    if cnt:
+        return text.replace(variant, canon), cnt, 0
+    return text, 0, 0
+
+
+def strategies_for(findings, config, aggressive):
+    allow_agg = config.get("strategies", {}).get("allow_aggressive", False)
+    want = set()
+    for f in findings:
+        sid = RULE_TO_STRATEGY.get(f["rule_id"])
+        if not sid:
+            continue
+        scfg = config.get("strategies", {}).get(sid, {})
+        if scfg.get("enabled") is False:
+            continue
+        risk = STRATEGY_TABLE[sid]["risk"]
+        if risk == "safe":
+            want.add(sid)
+        elif aggressive and allow_agg:
+            want.add(sid)
+    return want
+
+
+def apply_frontmatter(raw, skill_dir):
+    fm, body, ok = C.parse_frontmatter(raw)
+    changed = False
+    notes = []
+    if not ok:
+        fm = {}
+    if "name" not in fm or not fm.get("name"):
+        fm["name"] = os.path.basename(skill_dir.rstrip("/"))
+        changed = True
+        notes.append("补全 name: %s" % fm["name"])
+    if "description" not in fm or not str(fm.get("description")).strip():
+        fm["description"] = "[请补全：说明该技能能力与 WHEN 触发场景]"
+        changed = True
+        notes.append("补全 description 占位")
+    if fm.get("agent_created") is not True:
+        fm["agent_created"] = True
+        changed = True
+        notes.append("补全 agent_created: true")
+    if not changed:
+        return raw, notes
+    lines = ["---"]
+    for k, v in fm.items():
+        lines.append("%s: %s" % (k, "true" if v is True else ("false" if v is False else v)))
+    lines.append("---")
+    return "\n".join(lines) + "\n" + body, notes
+
+
+def apply_dedup(raw):
+    lines = raw.splitlines()
+    out = []
+    notes = []
+    i = 0
+    removed = 0
+    while i < len(lines):
+        j = i
+        while j + 1 < len(lines) and lines[j + 1].strip() == lines[i].strip() and lines[i].strip():
+            j += 1
+        if j - i >= 1:  # run of >=2 identical -> collapse to 1
+            removed += (j - i)
+            out.append(lines[i])
+            i = j + 1
+        else:
+            out.append(lines[i])
+            i += 1
+    if removed:
+        notes.append("移除 %d 行连续重复文本" % removed)
+    return "\n".join(out) + ("\n" if raw.endswith("\n") else ""), notes
+
+
+def apply_term_unify(raw, suggestions):
+    text = raw
+    notes = []
+    for variant, canon in suggestions.items():
+        if not variant or variant == canon:
+            continue
+        new, cnt, skipped = safe_replace(text, variant, canon)
+        text = new
+        if cnt:
+            note = "术语 '%s' → '%s' (%d 处)" % (variant, canon, cnt)
+            if skipped:
+                note += "（跳过 %d 处标题/句首大写）" % skipped
+            notes.append(note)
+    return text, notes
+
+
+def apply_phrase_normalize(raw):
+    text = raw
+    notes = []
+    for pat, rep in PHRASE_MAP:
+        cnt = len(re.findall(pat, text))
+        if cnt:
+            text = re.sub(pat, rep, text)
+            notes.append("弱化绝对化表述 %s → %s (%d 处)" % (pat, rep, cnt))
+    return text, notes
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("target")
+    ap.add_argument("--findings", required=True)
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--aggressive", action="store_true")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--config", default=None)
+    args = ap.parse_args()
+
+    cfg = C.read_config(args.config)
+    skill = C.load_skill(args.target)
+    findings = C.load_findings(args.findings)
+
+    # Build term-unification suggestions (language-aware, identifier-safe).
+    # We recompute here rather than trusting semantic.json to avoid cross-language
+    # rewrites (e.g. '技能' -> 'skill').
+    suggestions = build_term_suggestions(skill["raw"])
+
+    want = strategies_for(findings, cfg, args.aggressive)
+
+    applied = []
+    new_text = skill["raw"]
+    notes_all = []
+    report_only = []
+
+    if "OPT-FRONTMATTER" in want:
+        new_text, n = apply_frontmatter(new_text, skill["dir"])
+        if n:
+            applied.append("OPT-FRONTMATTER"); notes_all += n
+    if "OPT-DEDUP-BLOCK" in want:
+        new_text, n = apply_dedup(new_text)
+        if n:
+            applied.append("OPT-DEDUP-BLOCK"); notes_all += n
+    if "OPT-TERM-UNIFY" in want:
+        new_text, n = apply_term_unify(new_text, suggestions)
+        if n:
+            applied.append("OPT-TERM-UNIFY"); notes_all += n
+    if "OPT-PHRASE-NORMALIZE" in want:
+        new_text, n = apply_phrase_normalize(new_text)
+        if n:
+            applied.append("OPT-PHRASE-NORMALIZE"); notes_all += n
+    for sid in ("OPT-DEADREF-FIX", "OPT-REWRITE-CONFLICT", "OPT-RESTRUCTURE"):
+        if sid in want:
+            report_only.append(sid)
+
+    if args.dry_run:
+        print("DRY-RUN — would apply: %s" % (applied + report_only))
+        for n in notes_all:
+            print("  • " + n)
+        print("--- unified diff (first 60 lines) ---")
+        diff = difflib.unified_diff(skill["raw"].splitlines(), new_text.splitlines(),
+                                    "before", "after", lineterm="")
+        for i, line in enumerate(diff):
+            if i >= 60:
+                print("  ... (truncated)")
+                break
+            print(line)
+        return
+
+    # write back
+    if not args.dry_run:
+        backup = skill["skill_md"] + ".bak"
+        with open(backup, "w", encoding="utf-8") as f:
+            f.write(skill["raw"])
+        with open(skill["skill_md"], "w", encoding="utf-8") as f:
+            f.write(new_text)
+
+    diff = list(difflib.unified_diff(skill["raw"].splitlines(), new_text.splitlines(),
+                                     "before/SKILL.md", "after/SKILL.md", lineterm=""))
+    report = build_report(skill["dir"], applied, report_only, notes_all, diff, findings)
+    out_path = args.out or os.path.join(skill["dir"], ".skill-audit", "optimization-report.md")
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(report)
+    print("Optimization report written to: %s" % out_path)
+    print("Applied: %s" % (applied or ["(none)"]))
+    print("Report-only (manual): %s" % (report_only or ["(none)"]))
+
+
+def build_report(target, applied, report_only, notes, diff, findings):
+    sev_order = {"high": 0, "medium": 1, "low": 2}
+    finds = sorted(findings, key=lambda f: sev_order.get(f["severity"], 3))
+    lines = []
+    lines.append("# 优化前后对比报告 (Optimization Report)\n")
+    lines.append("- 目标: `%s`" % target)
+    lines.append("- 自动应用策略: %s" % (", ".join(applied) or "无"))
+    lines.append("- 仅建议(人工): %s" % (", ".join(report_only) or "无"))
+    lines.append("")
+    lines.append("## 关键发现 (按严重度)\n")
+    for f in finds[:30]:
+        lines.append("- **[%s] %s** @ %s — %s\n  - 建议: %s" % (
+            f["severity"], f["rule_id"], f["location"], f["evidence"], f["recommendation"]))
+    lines.append("")
+    lines.append("## 已应用改动\n")
+    for n in notes:
+        lines.append("- " + n)
+    if not notes:
+        lines.append("- (无自动文本改动)")
+    lines.append("")
+    lines.append("## 统一差异 (Unified Diff)\n")
+    lines.append("```diff")
+    lines.extend(diff[:400])
+    if len(diff) > 400:
+        lines.append("... (truncated)")
+    lines.append("```")
+    return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__":
+    main()

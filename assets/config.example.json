@@ -1,0 +1,40 @@
+{
+  "_comment": "复制为 <target>/.skill-audit/config.json 并按需修改。所有字段均可省略，省略时取脚本内置默认值。",
+  "rules": {
+    "STRUCT-001": {"enabled": true, "severity": "high"},
+    "STRUCT-007": {"enabled": true, "severity": "high"},
+    "STRUCT-008": {"enabled": true, "severity": "high"},
+    "PROMPT-005": {"enabled": true, "severity": "high"},
+    "SEM-004":    {"enabled": true, "severity": "high"},
+    "EFF-001":    {"enabled": true, "severity": "medium"},
+    "SEM-003":    {"enabled": true, "severity": "medium"}
+  },
+  "weights": {
+    "T": 0.22,
+    "R": 0.24,
+    "A": 0.18,
+    "C": 0.18,
+    "E": 0.18
+  },
+  "strategies": {
+    "OPT-FRONTMATTER":      {"enabled": true,  "risk": "safe"},
+    "OPT-DEDUP-BLOCK":      {"enabled": true,  "risk": "safe"},
+    "OPT-TERM-UNIFY":       {"enabled": true,  "risk": "safe"},
+    "OPT-DEADREF-FIX":      {"enabled": true,  "risk": "safe"},
+    "OPT-PHRASE-NORMALIZE": {"enabled": true,  "risk": "safe"},
+    "OPT-REWRITE-CONFLICT": {"enabled": true,  "risk": "aggressive"},
+    "OPT-RESTRUCTURE":      {"enabled": false, "risk": "aggressive"},
+    "allow_aggressive": false
+  },
+  "thresholds": {
+    "dup_sentence_jaccard": 0.6,
+    "repeat_phrase_min_count": 4,
+    "drift_threshold": 0.2,
+    "min_sentence_len": 8,
+    "max_skill_words": 5000
+  },
+  "_extensibility": {
+    "custom_rules_module": "/abs/path/custom_rules.py",
+    "custom_strategies_module": "/abs/path/custom_strategies.py"
+  }
+}
