@@ -29,11 +29,11 @@
 **目标**：同一概念用不同词表述会造成阅读混乱与检索困难。
 
 **方法**：
-1. 维护"同义术语簇"映射（可在 config 覆盖），默认簇如：
-   - `{Skill, skill, 技能, 这个技能}` → 建议统一为技能内最高频写法
-   - `{WorkBuddy, workbuddy, 助手}` → 统一为 WorkBuddy
-   - `{frontmatter, 前置元数据, YAML头}` → 统一为 frontmatter
-2. 统计每簇内各写法出现次数，取最高频者为"规范写法"。
+1. 维护"同义术语簇"映射，可在 `config.term_clusters` 覆盖。默认簇**只含跨框架通用写法**，不内置任何产品名：
+   - `{Skill, skill, 技能, 这个技能}` → 统一为技能内最高频写法
+   - `{frontmatter, 前置元数据, YAML头, yaml头}` → 统一为 frontmatter
+   - 产品专属簇（如某框架名）**不内置**；需用时在 `config.term_clusters` 自行加入，例如 `{"MyTool": ["MyTool", "mytool", "助手"]}`。
+2. 统计每簇内各写法出现次数，取最高频者为"规范写法"（语言内分组，绝不跨语言改写）。
 3. 标记所有偏离规范写法的位置，建议批量替换。
 
 ## 4. 冲突指令检测（SEM-004，高危）
@@ -76,7 +76,7 @@
     {"rule_id":"SEM-003","severity":"medium","location":"SKILL.md:55,89",
      "evidence":"'Skill' 与 '技能' 混用","recommendation":"统一为'技能'"}
   ],
-  "term_unify_suggestions": {"Skill":"技能","workbuddy":"WorkBuddy"}
+  "term_unify_suggestions": {"Skill":"技能"}
 }
 ```
 

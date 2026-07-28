@@ -34,19 +34,20 @@ for sid, info in STRATEGY_TABLE.items():
     for r in info["rules"]:
         RULE_TO_STRATEGY[r] = sid
 
+# Framework-neutral by default. Add product-specific clusters via config.term_clusters.
 DEFAULT_TERM_CLUSTERS = {
     "Skill": ["Skill", "skill", "技能", "这个技能"],
-    "WorkBuddy": ["WorkBuddy", "workbuddy", "助手"],
     "frontmatter": ["frontmatter", "前置元数据", "YAML头", "yaml头"],
 }
 PHRASE_MAP = [(r"100\s*%", "尽可能高"), (r"永远", "通常"), (r"绝对", "尽量")]
 
 
-def build_term_suggestions(raw):
+def build_term_suggestions(raw, clusters=None):
     """Language-aware term unification: only unify within the same script, and never
-    cross languages (so '技能' is never rewritten to 'skill')."""
+    cross languages (so '技能' is never rewritten to 'skill'). `clusters` overrides the
+    default set (config.term_clusters) so product-specific mappings stay opt-in."""
     sug = {}
-    for _canon, variants in DEFAULT_TERM_CLUSTERS.items():
+    for _canon, variants in (clusters or DEFAULT_TERM_CLUSTERS).items():
         groups = {"ascii": [], "cjk": []}
         for v in variants:
             if re.search(r"[一-鿿]", v):
@@ -221,7 +222,8 @@ def main():
     # Build term-unification suggestions (language-aware, identifier-safe).
     # We recompute here rather than trusting semantic.json to avoid cross-language
     # rewrites (e.g. '技能' -> 'skill').
-    suggestions = build_term_suggestions(skill["raw"])
+    term_clusters = cfg.get("term_clusters", DEFAULT_TERM_CLUSTERS)
+    suggestions = build_term_suggestions(skill["raw"], term_clusters)
 
     want = strategies_for(findings, cfg, args.aggressive)
 

@@ -19,9 +19,11 @@ import _common as C
 STOP = set("的 了 和 与 及 或 在 是 对 中 一个 一种 可以 我们 你 我 它 这 那 该 等 并 也 都 "
            "the a an of to and or in is are for with this that you we it".split())
 
+# Default term clusters are framework-neutral on purpose: only cross-framework
+# generic variants are bundled. Product-specific clusters (e.g. a tool's name)
+# belong in config.term_clusters, not here — see references/prompt-semantic-analysis.md.
 DEFAULT_CLUSTERS = {
     "Skill": ["Skill", "skill", "技能", "这个技能"],
-    "WorkBuddy": ["WorkBuddy", "workbuddy", "助手"],
     "frontmatter": ["frontmatter", "前置元数据", "YAML头", "yaml头"],
 }
 
@@ -214,7 +216,8 @@ def main():
     findings = []
     findings += near_dup_sentences(sents, dup_j, minlen)
     findings += repeated_phrases(body, rep_min)
-    term_f, suggestions = term_consistency(body, DEFAULT_CLUSTERS)
+    clusters = cfg.get("term_clusters", DEFAULT_CLUSTERS)
+    term_f, suggestions = term_consistency(body, clusters)
     findings += term_f
     findings += conflict_instructions(sents)
     findings += intent_drift(body, drift)

@@ -4,6 +4,9 @@
 
 skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破坏原有能力的前提下，发现结构 / 提示词 / 效率层面的问题，并按发现安全地自动优化。
 
+> **版本 v1.1.0** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
+> 完整用法见 `SKILL.md`：含 **30 秒快速开始**、**能力边界与异常处理**、**示例（Few-shot）**、**常见问题 FAQ**。
+
 ## 核心能力
 
 1. **结构 / 提示词 / 效率审查**（`scripts/audit_skill.py`）——基于 `references/audit-rules.md` 的规则集（STRUCT / PROMPT / SEM / EFF 多类），扫描 SKILL.md 与脚本的完整性、一致性、冗余。
@@ -39,10 +42,11 @@ skill-auditor/
 ## 用法
 
 - **作为 Skill 使用**：将本仓库放到 `~/.workbuddy/skills/skill-auditor/`（user scope）或 `<workspace>/.workbuddy/skills/`（project scope），WorkBuddy 会自动加载。对某个 Skill 说"审查这个 Skill""给这个 Skill 做个 TRACE 评测"即可触发。
-- **单独跑脚本**：所有脚本为 Python3 stdlib-only，无外部依赖。例如：
+- **单独跑脚本**：所有脚本为 Python3 stdlib-only，无外部依赖，参数与 `SKILL.md` 的 Workflow 一致。例如：
   ```bash
-  python3 scripts/audit_skill.py --skill <目标Skill路径> --report <输出.md>
-  python3 scripts/trace_eval.py  --skill <目标Skill路径>
+  python3 scripts/audit_skill.py <目标Skill路径> --json > audit.json
+  python3 scripts/trace_eval.py  <目标Skill路径> --json > trace.json
+  python3 scripts/optimize_apply.py <目标Skill路径> --findings audit.json --dry-run
   ```
 
 ## 设计原则

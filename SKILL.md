@@ -1,5 +1,6 @@
 ---
 name: skill-auditor
+version: 1.1.0
 description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
 agent_created: true
 ---
@@ -22,6 +23,18 @@ The skill ships with an **extensible audit-rule registry** and **configurable op
 strategies** (see `references/audit-rules.md` and `references/optimization-strategies.md`), so
 the rule set and the auto-apply behavior can be tuned without editing code.
 
+> **安全与伦理声明**：全部分析在本地完成，不联网、不上传你的 Skill 内容；自动优化始终保留可逆 diff 与 `.bak` 备份，绝不静默覆盖。仅"模型测试"阶段需你显式提供 `--model-config`，且该步可完全跳过。
+
+## 30 秒快速开始
+
+第一次用，记住三件事：
+
+1. **怎么启动**：直接对某个 Skill 说"审查这个 Skill""给这个 Skill 做个 TRACE 评测""测一下这个技能的边界情况"，或"对比优化前后"；等价说法都能触发（见下方触发条件）。
+2. **你会得到什么**：一份结构化报告——审计发现（结构/提示词/效率）+ TRACE 五维评分 + 测试结论；需要时才出前后 diff。
+3. **想改就改，但先看清**：优化默认只给建议与 dry-run 预览；真正落盘需你确认，且每次改动都可回退。
+
+> **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要时查 `references/` 各专项库 → 自定义看 `## Configuration`。
+
 ## When To Use
 
 - Review a skill before publishing or after feedback ("帮我看看这个 Skill 写得怎么样").
@@ -29,6 +42,36 @@ the rule set and the auto-apply behavior can be tuned without editing code.
 - Run a TRACE scorecard for a skill library / marketplace submission.
 - Test a skill's robustness ("这个 Skill 在空输入 / 超大输入下会怎样").
 - Produce a diffable before/after report of skill edits ("对比优化前后改了什么").
+- 对自己的 Skill 做质量自检（用 skill-auditor 审 skill-auditor 自身）。
+
+## 能力边界与异常处理
+
+### 能力边界（三栏表）
+
+| 类别 | 范围 | 处理原则 |
+|------|------|----------|
+| ✅ 能做 | 审查 / 评测 / 测试 / 安全优化任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 等框架通用） | 直接执行 Phase 0–5 标准流程 |
+| ⛔ 不做 | ①改写目标 Skill 的领域业务逻辑 ②处理二进制/非文本资源 ③保证某个评分或"一定通过" ④访问私有仓库或外发内容 | 明确告知不适用，不强行执行 |
+| 🔽 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 | 优雅降级，不拒答但标注假设与边界 |
+
+### 异常处理（诊断 → 修复 话术库）
+
+| 异常现象 | 诊断 | 标准修复动作 |
+|----------|------|--------------|
+| 找不到目标 Skill | 路径/目录不对 | 用父目录解析；仍无 `SKILL.md` 则请用户给出正确路径 |
+| `SKILL.md` 无法解析 | frontmatter 语法错误 | 报告具体行号，建议手动修正后再审 |
+| 引用资源不存在 | 死链/路径漂移 | `audit_skill.py` 标记 STRUCT-007/008，`optimize_apply.py` 可安全修复或仅建议 |
+| 发现有冲突 | 同概念多写法/冲突指令 | 输出 SEM-003/SEM-004，默认只建议；确需统一走 `OPT-TERM-UNIFY`（三重保护不降级） |
+| 用户只要建议不要改 | 意图是"审查"非"优化" | 停在 dry-run，直接呈现发现 + TRACE，不写盘 |
+| 高风险改写被拒 | `--aggressive` 超界 | 写入报告"仅建议(人工)"，由用户决策 |
+
+### 澄清问卷（输入模糊时主动使用）
+
+当用户未明确以下任一项时，动手前先问（合并提问，不超过 2 轮）：
+1. 要审/测/优化**哪个 Skill** 的路径？
+2. 作用域是 user 还是 project？
+3. 只要报告，还是要**自动优化落盘**？
+4. 是否允许 `--aggressive` 高风险改写？
 
 ## Design Principles
 
@@ -156,6 +199,28 @@ Assemble the final deliverable from `assets/report_template.md`:
 
 Write the report to `<target>/.skill-audit/REPORT.md` and present it.
 
+## 示例（Few-shot）
+
+为降低使用差异、提升稳定性，以下给出三类核心流程的输入/输出骨架。
+
+### 示例 1 · 审查（Audit）
+
+- **用户输入**："审查一下 ~/.workbuddy/skills/foo"
+- **技能动作**：Phase 0–1 → `audit.json` + `semantic.json` 合并；输出结构/提示词/效率 + 语义发现清单（按严重度）。
+- **关键产出**：如 `STRUCT-013 文档/脚本参数不一致`、`SEM-003 术语混用`、`EFF-001 重复块`。
+
+### 示例 2 · TRACE 评测
+
+- **用户输入**："给这个 Skill 做个 TRACE 评测"
+- **技能动作**：Phase 2 → `trace.json`；五维加权 0–100，最弱维度优先。
+- **关键产出**：`总分 92.0 / A`，维度表 + 每条证据。
+
+### 示例 3 · 优化（Optimize）
+
+- **用户输入**："把这个 Skill 的提示词冗余合并一下，先给我看看"
+- **技能动作**：Phase 4 → `--dry-run` 预览 diff；用户确认后再 `--out` 落盘 + `.bak` 备份。
+- **关键产出**：修改前/后对比 + 统一 diff，全部可回退。
+
 ## Configuration
 
 All extensibility lives in a JSON config (copy `assets/config.example.json` to
@@ -199,7 +264,7 @@ All intermediate artifacts land in `<target>/.skill-audit/`:
 
 | Script | Purpose | Key flags |
 |--------|---------|-----------|
-| `audit_skill.py` | Structure / prompt-quality / efficiency audit | `--json`, `--config`, `--rules-only` |
+| `audit_skill.py` | Structure / prompt-quality / efficiency audit | `--json`, `--config` |
 | `semantic_analyzer.py` | Redundancy, terminology, conflict detection | `--json`, `--min-sentence-len` |
 | `trace_eval.py` | TRACE 5-dimension scoring | `--json`, `--config`, `--prior trace.json` |
 | `skill_tester.py` | Static integrity + test-plan generation | `--plan-only`, `--run`, `--model-config`, `--merge-results` |
@@ -207,3 +272,38 @@ All intermediate artifacts land in `<target>/.skill-audit/`:
 
 All scripts are Python 3.9+ stdlib-only. No network or external packages required for
 audit / semantic / TRACE / static-test phases.
+
+## References / Assets 引用
+
+| 任务 | 需要加载的 references | 需要使用的 assets |
+|------|---------------------|------------------|
+| 结构/提示词/效率审查 | audit-rules.md | config.example.json |
+| 提示词语义分析 | prompt-semantic-analysis.md | — |
+| TRACE 五维评测 | trace-framework.md | — |
+| 安全自动优化 | optimization-strategies.md | report_template.md |
+| 自定义规则/策略/权重/术语簇 | （任意自定义模块） | config.example.json, model-config.example.json |
+
+加载策略：默认随脚本自动读取所需 reference；自定义扩展走 `config.custom_rules_module` / `config.custom_strategies_module`。
+
+## 常见问题 FAQ
+
+**Q1：它会直接改我的 Skill 吗？**
+A：默认只出报告 + dry-run 预览；真正落盘需你显式确认，且每次改动保留可逆 diff 与 `.bak` 备份，绝不静默覆盖。
+
+**Q2：支持哪些框架的 Skill？**
+A：任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 等通用规范）。非标准布局会自动降级处理（见能力边界）。
+
+**Q3：TRACE 分数怎么看？**
+A：五个维度加权 0–100，附证据。最弱维度 = 最高杠杆的改进点；等级参考 A(≥90) / B(75–89) / C(60–74) / D(<60)。
+
+**Q4：自动优化会不会改坏？**
+A：不会。`OPT-TERM-UNIFY` 有三重保护（标题行 / 英文句首 / 列表·引用·序号行首不降级），原则是"宁可少改不可改坏"；高风险改写默认仅建议。
+
+**Q5：我的 Skill 内容会泄露吗？**
+A：不会。审计/语义/TRACE/静态测试全部本地运行，无网络、无外部依赖；仅"模型测试"阶段需你显式提供 `--model-config`，且该步可完全跳过。
+
+**Q6：想自定义规则 / 权重 / 术语簇？**
+A：复制 `assets/config.example.json` 到 `<target>/.skill-audit/config.json` 即可，无需改代码；术语簇见 `config.term_clusters`。
+
+**Q7：能用来给 Skill 自己做质量自检吗？**
+A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检（本仓库 `.self-audit/REPORT.md` 即实例）。

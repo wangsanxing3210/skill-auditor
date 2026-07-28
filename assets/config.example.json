@@ -33,6 +33,10 @@
     "min_sentence_len": 8,
     "max_skill_words": 5000
   },
+  "term_clusters": {
+    "_comment": "可选。覆盖默认同义术语簇；默认仅含跨框架通用写法。加入产品专属簇示例（按需启用）：MyTool -> [MyTool, mytool, 助手]",
+    "MyTool": ["MyTool", "mytool", "助手"]
+  },
   "_extensibility": {
     "custom_rules_module": "/abs/path/custom_rules.py",
     "custom_strategies_module": "/abs/path/custom_strategies.py"
