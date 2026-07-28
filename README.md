@@ -1,6 +1,6 @@
 # skill-auditor
 
-> 一个用于**审查、评测、测试、优化**其他 WorkBuddy Skill 的元 Skill（meta-skill）。
+> 一个用于**审查、评测、测试、优化**其他 Skill 的元 Skill（meta-skill）——不限定于某家工具，适用于 WorkBuddy / OpenClaw 等任何基于 SKILL.md 的 Skill。
 
 skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破坏原有能力的前提下，发现结构 / 提示词 / 效率层面的问题，并按发现安全地自动优化。
 

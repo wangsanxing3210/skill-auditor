@@ -1,6 +1,6 @@
 # SkillHub TRACE 评测体系
 
-TRACE 是评估一个 WorkBuddy Skill 质量的五维框架。每个维度独立打分（0–100），再按权重合成
+TRACE 是评估一个 Skill 质量的五维框架（适用于任何基于 SKILL.md 的 Skill）。每个维度独立打分（0–100），再按权重合成
 总分。分数背后必须有**可复核的证据**（来自 `audit_skill.py` / `semantic_analyzer.py` /
 `skill_tester.py` 的输出），避免主观打分。
 
