@@ -1,5 +1,5 @@
 dist/
-.self-audit/
+.skill-audit/
 __pycache__/
 *.pyc
 *.bak

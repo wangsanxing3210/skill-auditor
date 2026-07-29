@@ -32,7 +32,7 @@
 
 {% for finding in findings %}
 - **[{{finding.severity}}] {{finding.rule_id}}** @ `{{finding.location}}`
-  - 证据：{{finding.eevidence}}
+  - 证据：{{finding.evidence}}
   - 建议：{{finding.recommendation}}
 {% endfor %}
 

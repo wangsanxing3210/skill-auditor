@@ -4,7 +4,7 @@
 
 skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破坏原有能力的前提下，发现结构 / 提示词 / 效率层面的问题，并按发现安全地自动优化。
 
-> **版本 v1.2.1** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
+> **版本 v1.3.0** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
 > 完整用法见 `SKILL.md`：含 **触发词速查卡**、**30 秒快速开始**、**能力边界与异常处理**、**示例（Few-shot）**。
 > 遇到卡点查 **`FAQ.md`**；想照着做看 **`COOKBOOK.md`**。
 
@@ -15,6 +15,7 @@ skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破�
 3. **SkillHub TRACE 五维评测**（`scripts/trace_eval.py`）——Trust / Reliability / Adaptability / Convention / Effectiveness 加权评分，输出总分与等级。
 4. **自动化测试**（`scripts/skill_tester.py`）——静态完整性校验 + 边界 / 准确性用例生成与执行（支持 `--model-config` 接入模型）。
 5. **安全自动优化**（`scripts/optimize_apply.py`）——基于发现应用优化策略，产出前后 diff 报告；所有改动可回退，破坏性操作默认 dry-run。
+6. **报告汇编**（`scripts/build_report.py`）——读取各阶段 JSON 产物，渲染 `assets/report_template.md`，自动生成 Phase 5 的 `REPORT.md`。
 
 ## 目录结构
 
@@ -23,13 +24,14 @@ skill-auditor/
 ├── SKILL.md                        # 元 Skill 入口与触发词
 ├── FAQ.md                          # 常见问题汇总页
 ├── COOKBOOK.md                     # 可照着做的完整场景案例
-├── scripts/                        # 6 个 stdlib-only Python 脚本
+├── scripts/                        # 7 个 stdlib-only Python 脚本
 │   ├── _common.py
 │   ├── audit_skill.py
 │   ├── semantic_analyzer.py
 │   ├── trace_eval.py
 │   ├── skill_tester.py
-│   └── optimize_apply.py
+│   ├── optimize_apply.py
+│   └── build_report.py
 ├── references/                     # 规则库与框架文档
 │   ├── audit-rules.md              # STRUCT/PROMPT/SEM/EFF 规则
 │   ├── optimization-strategies.md  # 优化策略 + 安全约束

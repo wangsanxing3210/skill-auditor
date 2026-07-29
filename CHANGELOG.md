@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3.0 — 2026-07-29
+
+**以"评审第三方"视角自测，修复文档/代码 drift 与两个真 bug，并补全 Phase 5 自动化**
+
+- **修复 C5 文件名检查 bug**：`trace_eval.py` 原先只检查文件名的首字符（`f.split("/")[-1][:1]`），中文/空格落在文件名后段会漏检；改为完整遍历文件名，与 `STRUCT-011` 一致。
+- **修复 `--run` 死 flag**：`skill_tester.py` 声明了 `--run` 但逻辑从未使用，静态检查默认就跑，导致 `--run` 与默认行为无差别。现明确：`--run`（或默认）执行静态检查；`--plan-only` 仅生成用例。同步修正 SKILL.md 中关于 `--run` 的两处矛盾描述。
+- **实现 3 条之前只列在文档、代码未落地的规则**：`PROMPT-001`（触发词明确）、`PROMPT-002`（角色/目标明确）、`EFF-002`（超长内联块应外置）。
+- **修正策略映射**：`optimize_apply.py` 的 `STRATEGY_TABLE` 移除无效的 `PROMPT-009` 映射，补入 `OPT-SEM-DEDUP`（折叠重复行，覆盖 SEM-001/002）与 `OPT-REF-EXTERNALIZE`（仅建议）。
+- **标注文档中未实现的规则/策略为「预留」**：`audit-rules.md`（EFF-004、PROMPT-008/009）、`optimization-strategies.md`（OPT-TRIGGER、OPT-EXAMPLE-ADD）明确标注，避免用户在 config 中启用后无效。
+- **新增 `build_report.py` 打通 Phase 5**：读取各阶段 JSON 产物 + `optimization-report.md`，渲染 `assets/report_template.md`（`{{}}` / `{% for %}` 模板），自动生成 `REPORT.md`。修复模板里的 `eevidence` 笔误（→ `evidence`）。SKILL.md Phase 5 增加调用步骤。
+- **README 同步**：脚本数 6→7，核心能力补充"报告汇编"。
+
 ## v1.2.1 — 2026-07-29
 
 **处理 Skill 宿主跳过 `.gitignore` / `LICENSE` 的提示**

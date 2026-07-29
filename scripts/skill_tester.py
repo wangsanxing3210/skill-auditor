@@ -149,7 +149,12 @@ def main():
                 raise C.GuardError("E_MODEL_CONFIG", "model-config 读取失败: %s" % e,
                                    "检查文件路径与 JSON 格式，或先省略 --model-config 跑静态测试") from e
 
-        static = [] if args.plan_only else static_tests(skill)
+        # --plan-only: only generate the boundary/accuracy test plan (no static run).
+        # --run: execute static integrity tests (the default when neither flag is given
+        #        also runs static, but --run is the explicit "I want the static pass now").
+        # Default (no flag): run static + generate plan, for a complete one-shot check.
+        run_static = not args.plan_only
+        static = static_tests(skill) if run_static else []
         cases = build_plan(skill)
 
         if args.merge_results:

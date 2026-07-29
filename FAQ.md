@@ -94,7 +94,7 @@ python3 scripts/trace_eval.py . --json
 python3 scripts/skill_tester.py . --run
 ```
 
-本仓库 `.self-audit/REPORT.md` 是一次自检实例。
+本仓库 `.skill-audit/REPORT.md` 是一次自检实例（由 `build_report.py` 生成）。
 
 ---
 

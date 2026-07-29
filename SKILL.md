@@ -1,6 +1,6 @@
 ---
 name: skill-auditor
-version: 1.2.1
+version: 1.3.0
 description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
 agent_created: true
 ---
@@ -159,6 +159,9 @@ prioritize which findings to fix first (lowest dimension = highest leverage).
 ### Phase 3 — Automated Testing
 
 ```bash
+# 静态完整性检查（引用是否存在 / frontmatter / 代码围栏 / 锚点）
+python3 <skill_dir>/scripts/skill_tester.py <target> --run > <target>/.skill-audit/testplan.json
+# 或仅生成边界/准确性用例（不跑静态检查）
 python3 <skill_dir>/scripts/skill_tester.py <target> --plan-only > <target>/.skill-audit/testplan.json
 ```
 
@@ -166,18 +169,21 @@ python3 <skill_dir>/scripts/skill_tester.py <target> --plan-only > <target>/.ski
 
 1. **Static integrity tests (fully automated, high value):** every `scripts/`, `references/`,
    `assets/` path referenced in SKILL.md actually exists; examples are internally consistent;
-   no broken internal anchors; frontmatter parses.
+   no broken internal anchors; frontmatter parses. These run by default and with `--run`.
 2. **Test-plan generation:** derives boundary cases (empty input, oversized skill, missing
    optional args, ambiguous intent) and accuracy cases (does the skill do what its description
-   claims?) from the skill's own description and examples.
+   claims?) from the skill's own description and examples. Always generated.
 
-To actually execute the plan against a model, pass `--run` together with a model config
-(`--model-config config.json`); otherwise the plan is emitted for an agent to execute manually
-(see Phase 3 execution note below). Boundary/accuracy results are recorded in `testplan.json`
-as `pass | fail | manual`.
+> **`--run` vs `--plan-only`**：`--run`（或默认无 flag）**执行**静态完整性检查并输出结果；
+> `--plan-only` **只生成**边界/准确性用例，跳过静态检查。两者行为不同，请按需选用。
+
+To actually execute the boundary/accuracy plan against a model, pass `--model-config config.json`
+along with `--run` (or default); otherwise the plan is emitted with `manual` status for an agent
+to execute (see Phase 3 execution note below). Boundary/accuracy results are recorded in
+`testplan.json` as `pass | fail | manual`.
 
 > **Phase 3 execution note:** True output testing requires loading the target skill into a
-> model session and running each case. When `--run` is not configured, the agent should: read
+> model session and running each case. When a case is `manual`, the agent should: read
 > `testplan.json`, execute the `manual` cases by invoking the target skill in a sandbox (or
 > reasoning over its instructions), and write `pass/fail` + evidence back, then re-run
 > `skill_tester.py --merge-results` to fold results into the report.
@@ -207,7 +213,15 @@ findings + TRACE scores directly.
 
 ### Phase 5 — Report
 
-Assemble the final deliverable from `assets/report_template.md`:
+Assemble the final deliverable from `assets/report_template.md` (a small `{{placeholder}}`
+/ `{% for %}` template) using the artifacts collected in Phases 1–4:
+
+```bash
+python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit/REPORT.md
+```
+
+`build_report.py` reads `audit.json` / `semantic.json` / `trace.json` / `testplan.json` plus the
+optional `optimization-report.md`, renders the template, and writes `REPORT.md`. The report contains:
 
 - Skill identity (name, path, scope).
 - TRACE scorecard table (5 dimensions + overall, with prior-vs-after if available).
@@ -292,6 +306,7 @@ All intermediate artifacts land in `<target>/.skill-audit/`:
 | `trace_eval.py` | TRACE 5-dimension scoring | `--json`, `--config`, `--prior trace.json` |
 | `skill_tester.py` | Static integrity + test-plan generation | `--plan-only`, `--run`, `--model-config`, `--merge-results` |
 | `optimize_apply.py` | Apply safe optimizations + diff + report | `--dry-run`, `--aggressive`, `--out`, `--config` |
+| `build_report.py` | Assemble Phase 5 REPORT.md from artifacts | `--out`, `--config` |
 
 All scripts are Python 3.9+ stdlib-only. No network or external packages required for
 audit / semantic / TRACE / static-test phases.
@@ -333,7 +348,7 @@ A：不会。审计/语义/TRACE/静态测试全部本地运行，无网络、�
 A：复制 `assets/config.example.json` 到 `<target>/.skill-audit/config.json` 即可，无需改代码；术语簇见 `config.term_clusters`。
 
 **Q7：能用来给 Skill 自己做质量自检吗？**
-A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检（本仓库 `.self-audit/REPORT.md` 即实例）。
+A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检（本仓库 `.skill-audit/REPORT.md` 即实例）。
 
 **Q8：报错信息里出现了错误码（如 E_TOO_LARGE），该怎么办？**
 A：每个错误码都附带"下一步"建议。例如 `E_TOO_LARGE` 表示 SKILL.md 超过 512 KB，建议把细节移到 `references/`；`E_NO_SKILL_MD` 表示路径不对。按提示操作即可，无需翻源码。

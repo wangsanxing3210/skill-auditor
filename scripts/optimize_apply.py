@@ -22,10 +22,12 @@ import _common as C
 
 STRATEGY_TABLE = {
     "OPT-FRONTMATTER": {"rules": ["STRUCT-001", "STRUCT-002", "STRUCT-003", "STRUCT-004"], "risk": "safe"},
-    "OPT-DEDUP-BLOCK": {"rules": ["EFF-001", "SEM-001", "SEM-002"], "risk": "safe"},
+    "OPT-DEDUP-BLOCK": {"rules": ["EFF-001"], "risk": "safe"},
+    "OPT-SEM-DEDUP": {"rules": ["SEM-001", "SEM-002"], "risk": "safe"},
     "OPT-TERM-UNIFY": {"rules": ["SEM-003"], "risk": "safe"},
     "OPT-DEADREF-FIX": {"rules": ["STRUCT-007", "STRUCT-008", "STRUCT-009", "EFF-003"], "risk": "safe"},
-    "OPT-PHRASE-NORMALIZE": {"rules": ["PROMPT-006", "PROMPT-009"], "risk": "safe"},
+    "OPT-PHRASE-NORMALIZE": {"rules": ["PROMPT-006"], "risk": "safe"},
+    "OPT-REF-EXTERNALIZE": {"rules": ["EFF-002"], "risk": "safe"},
     "OPT-REWRITE-CONFLICT": {"rules": ["SEM-004"], "risk": "aggressive"},
     "OPT-RESTRUCTURE": {"rules": ["PROMPT-004", "EFF-005"], "risk": "aggressive"},
 }
@@ -252,6 +254,11 @@ def main():
             new_text, n = apply_dedup(new_text)
             if n:
                 applied.append("OPT-DEDUP-BLOCK"); notes_all += n
+        if "OPT-SEM-DEDUP" in want:
+            # collapse repeated/near-duplicate lines (covers SEM-001/SEM-002 repeated blocks)
+            new_text, n = apply_dedup(new_text)
+            if n:
+                applied.append("OPT-SEM-DEDUP"); notes_all += n
         if "OPT-TERM-UNIFY" in want:
             new_text, n = apply_term_unify(new_text, suggestions)
             if n:
@@ -260,7 +267,7 @@ def main():
             new_text, n = apply_phrase_normalize(new_text)
             if n:
                 applied.append("OPT-PHRASE-NORMALIZE"); notes_all += n
-        for sid in ("OPT-DEADREF-FIX", "OPT-REWRITE-CONFLICT", "OPT-RESTRUCTURE"):
+        for sid in ("OPT-DEADREF-FIX", "OPT-REWRITE-CONFLICT", "OPT-RESTRUCTURE", "OPT-REF-EXTERNALIZE"):
             if sid in want:
                 report_only.append(sid)
 

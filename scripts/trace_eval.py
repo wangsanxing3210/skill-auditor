@@ -109,7 +109,7 @@ def metrics_C(skill, body, art):
     has_dir = lambda d: any(f.startswith(d + "/") or f == d for f in skill["files"])
     need = [d for d in ("scripts", "references", "assets") if d + "/" in body]
     c4 = m_pass() if all(has_dir(d) for d in need) else m_part()
-    c5 = m_pass() if not any((ord(ch) > 127 or " " in f) for f in skill["files"] for ch in f.split("/")[-1][:1]) else m_part()
+    c5 = m_pass() if not any((ord(ch) > 127 or " " in f) for f in skill["files"] for ch in f.split("/")[-1]) else m_part()
     wc = len(body.split())
     c6 = m_pass() if (wc <= 5000 or "references/" in body) else m_part()
     return {"C1": c1, "C2": c2, "C3": c3, "C4": c4, "C5": c5, "C6": c6}

@@ -9,19 +9,21 @@ unified diff 供人工复核。
 
 ## 策略清单
 
-| strategy_id | 绑定规则 | 风险 | 动作 |
-|-------------|----------|------|------|
-| OPT-FRONTMATTER | STRUCT-001/002/003/004 | safe | 补全/修复 frontmatter（加 name/description/agent_created） |
-| OPT-TRIGGER | PROMPT-001/005 | safe | 把 [TODO]、缺失的触发词补全为占位模板 |
-| OPT-DEDUP-BLOCK | EFF-001 | safe | 删除连续重复文本块，保留一份 |
-| OPT-SEM-DEDUP | SEM-001/002 | safe | 合并近义重复句 / 高频短语 |
-| OPT-TERM-UNIFY | SEM-003 | safe | 统一术语（按 skill 内最高频写法归一） |
-| OPT-REF-EXTERNALIZE | EFF-002 | safe | 将大段参考内容建议外置（写注释提示，不强制移动） |
-| OPT-DEADREF-FIX | STRUCT-007/008/009, EFF-003 | safe | 修正/移除死引用路径 |
-| OPT-PHRASE-NORMALIZE | PROMPT-006/009 | safe | 弱化绝对化表述、消除歧义措辞 |
-| OPT-REWRITE-CONFLICT | SEM-004 | aggressive | 重写冲突指令，保留更安全/更合理的版本 |
-| OPT-RESTRUCTURE | PROMPT-004, EFF-005 | aggressive | 将超长 SKILL.md 拆段外置到 references/ |
-| OPT-EXAMPLE-ADD | PROMPT-003/007 | aggressive | 为缺失示例/交付物补写示例段落 |
+> 标注「（预留，尚未实现）」的策略目前在任何配置下都不会被 `optimize_apply.py` 执行——请勿在 `config.strategies` 中启用它们，否则不会产生任何改动。实现的进度见上表「状态」列。
+
+| strategy_id | 绑定规则 | 风险 | 动作 | 状态 |
+|-------------|----------|------|------|------|
+| OPT-FRONTMATTER | STRUCT-001/002/003/004 | safe | 补全/修复 frontmatter（加 name/description/agent_created） | 已实现 |
+| OPT-DEDUP-BLOCK | EFF-001 | safe | 删除连续重复文本块，保留一份 | 已实现 |
+| OPT-SEM-DEDUP | SEM-001/002 | safe | 合并近义重复句 / 高频短语（折叠重复行） | 已实现 |
+| OPT-TERM-UNIFY | SEM-003 | safe | 统一术语（按 skill 内最高频写法归一） | 已实现 |
+| OPT-REF-EXTERNALIZE | EFF-002 | safe | 将大段内联内容建议外置（报告中提示，由人决定是否移动） | 已实现（仅建议） |
+| OPT-DEADREF-FIX | STRUCT-007/008/009, EFF-003 | safe | 修正/移除死引用路径 | 已实现（仅建议） |
+| OPT-PHRASE-NORMALIZE | PROMPT-006 | safe | 弱化绝对化表述 | 已实现 |
+| OPT-REWRITE-CONFLICT | SEM-004 | aggressive | 重写冲突指令，保留更安全/更合理的版本 | 已实现（仅建议） |
+| OPT-RESTRUCTURE | PROMPT-004, EFF-005 | aggressive | 将超长 SKILL.md 拆段外置到 references/ | 已实现（仅建议） |
+| OPT-TRIGGER | PROMPT-001/005 | safe | **（预留，尚未实现）** 把 [TODO]、缺失的触发词补全为占位模板 |
+| OPT-EXAMPLE-ADD | PROMPT-003/007 | aggressive | **（预留，尚未实现）** 为缺失示例/交付物补写示例段落 |
 
 ## 安全约束（OPT-TERM-UNIFY 必读）
 

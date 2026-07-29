@@ -98,6 +98,16 @@ def run_builtin(skill, cfg):
                 "改为祈使/不定式（动词开头）")
 
     # --- prompt quality ---
+    # PROMPT-001: trigger phrases are explicit (lists user utterances that invoke the skill)
+    trigger_signals = ("触发词", "触发方式", "triggers include", "触发", "when to use", "when to")
+    if not any(s in body for s in trigger_signals):
+        add("PROMPT-001", "medium", "prompt", "SKILL.md", "未列出可触发该技能的用户表述/触发词",
+            "补充「触发词速查卡」或 When To Use 段落，给出典型用户说法")
+    # PROMPT-002: role/target stated up front
+    if not any(s in body for s in ("Overview", "概述", "这个技能做什么", "角色", "目标", "用途")):
+        add("PROMPT-002", "medium", "prompt", "SKILL.md", "开头未说明技能角色/目标",
+            "在 Overview 或开头段落说明「这个技能做什么、适用谁」")
+
     if "[TODO]" in raw or "[todo" in raw.lower():
         add("PROMPT-005", "high", "prompt", "SKILL.md", "存在未填占位 [TODO]",
             "补全占位内容或删除")
@@ -143,6 +153,16 @@ def run_builtin(skill, cfg):
 
     # doc/code flag consistency
     findings += check_doc_arg_consistency(skill, rules)
+
+    # EFF-002: oversized inline content that should be externalized to references/
+    # Heuristic: any fenced code block > 40 lines, or any single section body that is
+    # very long without a references/ pointer, signals content better placed in references/.
+    fence_blocks = re.findall(r"```(?:[A-Za-z0-9_-]*)\n(.*?)```", body, re.S)
+    big_blocks = [b for b in fence_blocks if b.strip() and len(b.strip().splitlines()) > 40]
+    if big_blocks:
+        add("EFF-002", "medium", "efficiency", "SKILL.md",
+            "存在 %d 个超长内联代码块（>40 行），可外置到 references/" % len(big_blocks),
+            "将大段可复用内容拆分为 references/ 下的独立文件，SKILL.md 仅引用入口")
 
     # repository metadata files that some skill hosts skip (e.g. .gitignore, LICENSE)
     for f in files:
