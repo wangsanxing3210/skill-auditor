@@ -1,6 +1,6 @@
 ---
 name: skill-auditor
-version: 1.1.0
+version: 1.2.0
 description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
 agent_created: true
 ---
@@ -25,15 +25,32 @@ the rule set and the auto-apply behavior can be tuned without editing code.
 
 > **安全与伦理声明**：全部分析在本地完成，不联网、不上传你的 Skill 内容；自动优化始终保留可逆 diff 与 `.bak` 备份，绝不静默覆盖。仅"模型测试"阶段需你显式提供 `--model-config`，且该步可完全跳过。
 
+## 触发词速查卡
+
+| 你想让 skill-auditor 做什么 | 可以直接这样说 | 它会执行的阶段 |
+|----------------------------|----------------|---------------|
+| 审查一个 Skill | "审查一下 ~/.workbuddy/skills/foo" / "帮我看看这个 Skill 写得怎么样" | Phase 0–1 |
+| 跑 TRACE 评分 | "给这个 Skill 做个 TRACE 评测" / "评一下质量" | Phase 2 |
+| 测边界情况 | "测一下这个技能的边界情况" / "空输入/大文件会怎样" | Phase 3 |
+| 优化并预览 | "把提示词里重复的地方合并一下，先给我看看" | Phase 4 dry-run |
+| 确认落盘 | "确认优化" / "就按这个改" | Phase 4 apply |
+| 对比前后 | "对比优化前后改了什么" | Phase 5 |
+
+> 提示：不需要记特殊命令，用自然语言描述意图即可；skill-auditor 会先澄清模糊点再动手。
+
 ## 30 秒快速开始
 
 第一次用，记住三件事：
 
-1. **怎么启动**：直接对某个 Skill 说"审查这个 Skill""给这个 Skill 做个 TRACE 评测""测一下这个技能的边界情况"，或"对比优化前后"；等价说法都能触发（见下方触发条件）。
+1. **怎么启动**：直接对某个 Skill 说"审查这个 Skill""给这个 Skill 做个 TRACE 评测""测一下这个技能的边界情况"，或"对比优化前后"；等价说法都能触发（见上方触发词速查卡）。
 2. **你会得到什么**：一份结构化报告——审计发现（结构/提示词/效率）+ TRACE 五维评分 + 测试结论；需要时才出前后 diff。
 3. **想改就改，但先看清**：优化默认只给建议与 dry-run 预览；真正落盘需你确认，且每次改动都可回退。
 
-> **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要时查 `references/` 各专项库 → 自定义看 `## Configuration`。
+**零配置开箱可用**：审查、语义分析、TRACE 评测、静态完整性测试都不需要任何外部模型或网络，下载即用；只有"模型输出测试"才需要可选的 `--model-config`。
+
+**稳定性与资源保护**：SKILL.md 超过 512 KB 或正文超过 5 万词时，语义分析会自动降级为"采样模式"，避免占用过多内存；所有错误都会给出明确错误码 + 下一步操作建议，不会直接崩溃。
+
+> **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要完整场景案例看 `COOKBOOK.md` → 遇到卡点查 `FAQ.md` → 自定义看 `## Configuration`。
 
 ## When To Use
 
@@ -50,9 +67,9 @@ the rule set and the auto-apply behavior can be tuned without editing code.
 
 | 类别 | 范围 | 处理原则 |
 |------|------|----------|
-| ✅ 能做 | 审查 / 评测 / 测试 / 安全优化任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 等框架通用） | 直接执行 Phase 0–5 标准流程 |
-| ⛔ 不做 | ①改写目标 Skill 的领域业务逻辑 ②处理二进制/非文本资源 ③保证某个评分或"一定通过" ④访问私有仓库或外发内容 | 明确告知不适用，不强行执行 |
-| 🔽 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 | 优雅降级，不拒答但标注假设与边界 |
+| 能做 | 审查 / 评测 / 测试 / 安全优化任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 等框架通用） | 直接执行 Phase 0–5 标准流程 |
+| 不做 | ①改写目标 Skill 的领域业务逻辑 ②处理二进制/非文本资源 ③保证某个评分或"一定通过" ④访问私有仓库或外发内容 | 明确告知不适用，不强行执行 |
+| 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 | 优雅降级，不拒答但标注假设与边界 |
 
 ### 异常处理（诊断 → 修复 话术库）
 
@@ -72,6 +89,8 @@ the rule set and the auto-apply behavior can be tuned without editing code.
 2. 作用域是 user 还是 project？
 3. 只要报告，还是要**自动优化落盘**？
 4. 是否允许 `--aggressive` 高风险改写？
+
+> **接下来读什么**：想了解标准执行流程 → `## Workflow`；想直接看输入输出样例 → `## 示例（Few-shot）`。
 
 ## Design Principles
 
@@ -199,6 +218,8 @@ Assemble the final deliverable from `assets/report_template.md`:
 
 Write the report to `<target>/.skill-audit/REPORT.md` and present it.
 
+> **接下来读什么**：想照着实例跑一遍 → `## 示例（Few-shot）`；想自己配置规则/权重 → `## Configuration`。
+
 ## 示例（Few-shot）
 
 为降低使用差异、提升稳定性，以下给出三类核心流程的输入/输出骨架。
@@ -233,6 +254,8 @@ All extensibility lives in a JSON config (copy `assets/config.example.json` to
 
 Pass `--config <path>` to any script that supports it (`audit_skill.py`, `trace_eval.py`,
 `optimize_apply.py`).
+
+> **接下来读什么**：想扩展自定义规则 → `## Extensibility`；遇到具体问题 → `## 常见问题 FAQ` 或独立 `FAQ.md`。
 
 ## Extensibility
 
@@ -282,8 +305,12 @@ audit / semantic / TRACE / static-test phases.
 | TRACE 五维评测 | trace-framework.md | — |
 | 安全自动优化 | optimization-strategies.md | report_template.md |
 | 自定义规则/策略/权重/术语簇 | （任意自定义模块） | config.example.json, model-config.example.json |
+| 查常见问题/反模式 | FAQ.md | — |
+| 照案例执行 | COOKBOOK.md | — |
 
 加载策略：默认随脚本自动读取所需 reference；自定义扩展走 `config.custom_rules_module` / `config.custom_strategies_module`。
+
+> **接下来读什么**：还在入门 → `FAQ.md`；想照着做 → `COOKBOOK.md`。
 
 ## 常见问题 FAQ
 
@@ -307,3 +334,18 @@ A：复制 `assets/config.example.json` 到 `<target>/.skill-audit/config.json` 
 
 **Q7：能用来给 Skill 自己做质量自检吗？**
 A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检（本仓库 `.self-audit/REPORT.md` 即实例）。
+
+**Q8：报错信息里出现了错误码（如 E_TOO_LARGE），该怎么办？**
+A：每个错误码都附带"下一步"建议。例如 `E_TOO_LARGE` 表示 SKILL.md 超过 512 KB，建议把细节移到 `references/`；`E_NO_SKILL_MD` 表示路径不对。按提示操作即可，无需翻源码。
+
+**Q9：我的 SKILL.md 很大（几千行），会不会卡住？**
+A：不会。正文超过 5 万词或 SKILL.md 超过 512 KB 时，语义分析会自动进入"采样模式"：只分析前 2000 句，跳过全量 O(n²) 检查，并产出提示告诉你降级了。
+
+**Q10：完整测试一定要配 `--model-config` 吗？**
+A：不是必须的。静态完整性测试（引用是否存在、frontmatter 是否合法、代码围栏是否配对等）零配置即可跑；只有"把测试用例交给真实模型执行"这一步才需要 `--model-config`，且可以跳过。
+
+**Q11：语义分析报"疑似冲突指令"，但其实是正常说明，怎么办？**
+A：skill-auditor 对冲突指令加了"请人工复核"提示，不会直接改写。你可以在 `config.json` 里把 `SEM-004` 的 severity 调低或关闭，也可忽略该建议。
+
+**Q12：想快速提升 TRACE 分数，应该先看哪个维度？**
+A：看总分最低的那个维度。通常优先级：R（可靠性，边界处理/错误说明）> T（安全可信）> E（有效性，描述与能力一致）> A（适用性，配置/扩展）> C（规范性，结构/示例）。具体修复清单见审计报告。

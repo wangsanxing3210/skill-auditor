@@ -73,9 +73,12 @@ def split_sentences(body):
     return out
 
 
-def near_dup_sentences(sents, th, minlen):
+def near_dup_sentences(sents, th, minlen, heavy=False):
     findings = []
     n = len(sents)
+    if heavy:
+        # For oversized skills, sample only the first portion to stay responsive.
+        n = min(n, C.MAX_SENTENCES)
     for i in range(n):
         if len(sents[i]) < minlen:
             continue
@@ -139,14 +142,18 @@ def term_consistency(body, clusters):
         if total == 0:
             continue
         best = max(counts, key=counts.get)
+        best_ratio = counts[best] / total if total else 1.0
         off = [v for v in variants if v != best and counts[v] > 0]
         if off:
             for v in off:
                 suggestions[v] = best
+            # Confidence: low when the "best" form is barely dominant.
+            confidence = "高" if best_ratio >= 0.7 else ("中" if best_ratio >= 0.5 else "低（建议人工复核）")
             findings.append(C.make_finding(
                 "SEM-003", "medium", "semantic", "SKILL.md",
-                "术语不一致: %s 混用 (%s)" % (canon, ", ".join("%s×%d" % (v, counts[v]) for v in variants)),
-                "统一为 '%s'" % best))
+                "术语不一致: %s 混用 (%s)；规范写法置信度 %s" % (
+                    canon, ", ".join("%s×%d" % (v, counts[v]) for v in variants), confidence),
+                "统一为 '%s'%s" % (best, "；若置信度低，请人工确认规范写法" if "低" in confidence else "")))
     return findings, suggestions
 
 
@@ -162,11 +169,11 @@ def conflict_instructions(sents):
         tp = tokenize(p) - STOP
         for n in neg:
             tn = tokenize(n) - STOP
-            if tp and tn and jaccard(tp, tn) >= 0.3:
+            if tp and tn and jaccard(tp, tn) >= 0.4:
                 findings.append(C.make_finding(
                     "SEM-004", "high", "semantic", "SKILL.md",
-                    "冲突指令: '%s' vs '%s'" % (p[:40], n[:40]),
-                    "保留更安全/更具体的版本，删除另一条"))
+                    "疑似冲突指令: '%s' vs '%s'（请人工复核，可能为正常正负场景说明）" % (p[:40], n[:40]),
+                    "确认确为冲突后，保留更安全/更具体的版本，删除或弱化另一条"))
     return findings
 
 
@@ -192,38 +199,64 @@ def intent_drift(body, th):
     return findings
 
 
+def _emit(code, message, next_step, json_mode):
+    if json_mode:
+        print(json.dumps({"ok": False, "error": {"code": code, "message": message, "next_step": next_step}},
+                         ensure_ascii=False, indent=2))
+    else:
+        print("[%s] %s" % (code, message))
+        if next_step:
+            print("下一步: %s" % next_step)
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("skill_md")
-    ap.add_argument("--json", action="store_true")
-    ap.add_argument("--min-sentence-len", type=int, default=None)
-    ap.add_argument("--config", default=None)
+    ap = argparse.ArgumentParser(
+        description="Prompt semantic analysis: redundancy, terminology, conflict detection.")
+    ap.add_argument("skill_md", help="Path to SKILL.md")
+    ap.add_argument("--json", action="store_true", help="Output JSON")
+    ap.add_argument("--min-sentence-len", type=int, default=None, help="Minimum sentence length")
+    ap.add_argument("--config", default=None, help="Path to config.json")
     args = ap.parse_args()
 
-    cfg = C.read_config(args.config)
-    th = cfg.get("thresholds", {})
-    minlen = args.min_sentence_len or th.get("min_sentence_len", 8)
-    dup_j = th.get("dup_sentence_jaccard", 0.6)
-    rep_min = th.get("repeat_phrase_min_count", 4)
-    drift = th.get("drift_threshold", 0.2)
+    try:
+        cfg = C.read_config(args.config)
+        th = cfg.get("thresholds", {})
+        minlen = args.min_sentence_len or th.get("min_sentence_len", 8)
+        dup_j = th.get("dup_sentence_jaccard", 0.6)
+        rep_min = th.get("repeat_phrase_min_count", 4)
+        drift = th.get("drift_threshold", 0.2)
 
-    with open(args.skill_md, "r", encoding="utf-8") as f:
-        body = f.read()
-    # strip frontmatter for semantic analysis
-    _, body, _ = C.parse_frontmatter(body)
+        raw = C.safe_read_text(args.skill_md, label="SKILL.md")
+        _, body, _ = C.parse_frontmatter(raw)
+        heavy = C.body_too_heavy(body)
+        if heavy:
+            note = C.make_finding(
+                "SEM-INFO", "low", "semantic", "SKILL.md",
+                "正文超过 %d 词，已启用大文件降级模式（仅分析前 %d 句，跳过全量 O(n²) 检查）" % (
+                    C.MAX_BODY_WORDS_FOR_HEAVY, C.MAX_SENTENCES),
+                "如需完整分析，请拆分正文到 references/ 或减少字数")
+        else:
+            note = None
 
-    sents = split_sentences(body)
-    findings = []
-    findings += near_dup_sentences(sents, dup_j, minlen)
-    findings += repeated_phrases(body, rep_min)
-    clusters = cfg.get("term_clusters", DEFAULT_CLUSTERS)
-    term_f, suggestions = term_consistency(body, clusters)
-    findings += term_f
-    findings += conflict_instructions(sents)
-    findings += intent_drift(body, drift)
+        sents = split_sentences(body)
+        findings = []
+        if note:
+            findings.append(note)
+        findings += near_dup_sentences(sents, dup_j, minlen, heavy=heavy)
+        if not heavy:
+            findings += repeated_phrases(body, rep_min)
+        clusters = cfg.get("term_clusters", DEFAULT_CLUSTERS)
+        term_f, suggestions = term_consistency(body, clusters)
+        findings += term_f
+        findings += conflict_instructions(sents[:C.MAX_SENTENCES] if heavy else sents)
+        findings += intent_drift(body, drift)
+    except Exception as e:
+        code, message, next_step = C.humanize_error(e, "semantic_analyzer")
+        _emit(code, message, next_step, args.json)
+        sys.exit(1)
 
     if args.json:
-        print(json.dumps({"semantic_findings": findings,
+        print(json.dumps({"ok": True, "semantic_findings": findings,
                           "term_unify_suggestions": suggestions},
                          ensure_ascii=False, indent=2))
     else:

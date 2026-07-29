@@ -8,6 +8,11 @@ import sys
 import json
 import re
 
+# Resource guards: keep the tool responsive on oversized skills.
+MAX_SKILL_BYTES = 512 * 1024          # ~512 KB SKILL.md soft cap
+MAX_SENTENCES = 2_000                 # semantic analyzer early-exit threshold
+MAX_BODY_WORDS_FOR_HEAVY = 50_000     # above this, skip O(n^2) heavy checks
+
 DEFAULT_CONFIG = {
     "rules": {},
     "weights": {"T": 0.22, "R": 0.24, "A": 0.18, "C": 0.18, "E": 0.18},
@@ -20,6 +25,55 @@ DEFAULT_CONFIG = {
         "max_skill_words": 5000,
     },
 }
+
+
+class GuardError(Exception):
+    """A user-friendly error with a concrete next-step recommendation."""
+    def __init__(self, code, message, next_step=""):
+        super().__init__(message)
+        self.code = code
+        self.next_step = next_step
+
+
+def humanize_error(exc, tool_name="skill-auditor"):
+    """Convert common exceptions into plain-language messages + next steps."""
+    if isinstance(exc, GuardError):
+        return exc.code, str(exc), exc.next_step
+    if isinstance(exc, FileNotFoundError):
+        return "E_NOT_FOUND", "找不到目标 Skill 或 SKILL.md", "请确认路径正确，或给出包含 SKILL.md 的目录"
+    if isinstance(exc, PermissionError):
+        return "E_PERMISSION", "没有权限读取/写入该路径", "检查文件权限，或换一个你有写权限的目录"
+    if isinstance(exc, json.JSONDecodeError):
+        return "E_BAD_JSON", "JSON 配置文件解析失败（%s 附近）" % exc.lineno, "用 JSON 校验器检查 config / model-config 文件格式"
+    if isinstance(exc, UnicodeDecodeError):
+        return "E_ENCODING", "文件编码不是 UTF-8，无法读取", "将 SKILL.md 转为 UTF-8 编码后再试"
+    if isinstance(exc, MemoryError):
+        return "E_MEMORY", "系统内存不足，无法处理该文件", "关闭其他程序，或换一台内存更大的机器；也可拆分 SKILL.md"
+    return "E_UNEXPECTED", "运行中遇到意外错误: %s" % exc, "请重试；若持续出现，请截图错误信息反馈"
+
+
+def safe_read_text(path, label="文件"):
+    """Read a text file with size guard and clear error messages."""
+    try:
+        size = os.path.getsize(path)
+    except OSError as e:
+        raise GuardError("E_STAT", "无法读取 %s 大小: %s" % (label, e),
+                         "检查路径是否存在且有读取权限") from e
+    if size > MAX_SKILL_BYTES:
+        raise GuardError(
+            "E_TOO_LARGE",
+            "%s 大小 %.1f KB，超过当前限制 %.1f KB" % (label, size / 1024, MAX_SKILL_BYTES / 1024),
+            "① 精简 SKILL.md 正文，把细节移到 references/；② 或在 config.json 中提高阈值（advanced）"
+        )
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except UnicodeDecodeError as e:
+        raise GuardError("E_ENCODING", "%s 编码错误: %s" % (label, e),
+                         "将文件保存为 UTF-8 无 BOM 格式后再试") from e
+    except OSError as e:
+        raise GuardError("E_READ", "读取 %s 失败: %s" % (label, e),
+                         "检查文件权限与磁盘状态") from e
 
 
 def find_skill_md(target):
@@ -56,13 +110,20 @@ def parse_frontmatter(text):
 
 
 def load_skill(target):
-    """Load a target skill into a dict. target may be a dir or SKILL.md path."""
+    """Load a target skill into a dict. target may be a dir or SKILL.md path.
+
+    Applies a soft size guard on SKILL.md; oversized files raise GuardError with
+    actionable guidance instead of crashing later during O(n^2) analysis.
+    """
     path = find_skill_md(target)
     if not path:
-        raise FileNotFoundError("SKILL.md not found under: %s" % target)
+        raise GuardError(
+            "E_NO_SKILL_MD",
+            "在 '%s' 下找不到 SKILL.md" % target,
+            "请给出 Skill 目录（含 SKILL.md）或直接给出 SKILL.md 的完整路径"
+        )
     skill_dir = os.path.dirname(path)
-    with open(path, "r", encoding="utf-8") as f:
-        raw = f.read()
+    raw = safe_read_text(path, label="SKILL.md")
     fm, body, ok = parse_frontmatter(raw)
     files = []
     for root, _, fnames in os.walk(skill_dir):
@@ -78,6 +139,11 @@ def load_skill(target):
         "fm_ok": ok,
         "files": files,
     }
+
+
+def body_too_heavy(body):
+    """Return True if the body is large enough that O(n^2) checks should degrade."""
+    return len(body.split()) > MAX_BODY_WORDS_FOR_HEAVY
 
 
 def read_config(path):

@@ -75,14 +75,16 @@ def metrics_R(skill, body, art):
         r2 = m_pass()
     else:
         r2 = m_part()
-    r3 = m_pass() if any(w in body for w in ["错误", "失败", "回退", "异常处理", "error", "fallback", "容错"]) else m_part()
+    r3 = m_pass() if any(w in body for w in ["错误", "失败", "回退", "异常处理", "error", "fallback", "容错", "友好错误"]) else m_part()
     r4 = m_pass() if ("```" in body or "示例" in body or "example" in body.lower()) else m_fail()
+    # R7 oversized-skill handling: body mentions limits, guards, or degraded mode
+    r7 = m_pass() if any(w in body for w in ["大文件", "超大", "限制", "降级", "guard", "大小限制", "资源保护"]) else m_part()
     r5 = m_pass() if any(w in body for w in ["边界", "空输入", "超大", "缺失", "boundary", "empty input", "缺失参数"]) else m_fail()
     # R6 conflicts from semantic artifact
     sem = (art.get("semantic") or {}).get("semantic_findings", [])
     has_conflict = any(f.get("rule_id") == "SEM-004" for f in sem)
     r6 = m_fail() if has_conflict else m_pass()
-    return {"R1": r1, "R2": r2, "R3": r3, "R4": r4, "R5": r5, "R6": r6}
+    return {"R1": r1, "R2": r2, "R3": r3, "R4": r4, "R5": r5, "R6": r6, "R7": r7}
 
 
 def metrics_A(skill, body, art):
@@ -146,54 +148,71 @@ def grade(overall):
     return "D"
 
 
+def _emit(code, message, next_step, json_mode):
+    if json_mode:
+        print(json.dumps({"ok": False, "error": {"code": code, "message": message, "next_step": next_step}},
+                         ensure_ascii=False, indent=2))
+    else:
+        print("[%s] %s" % (code, message))
+        if next_step:
+            print("下一步: %s" % next_step)
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("target")
-    ap.add_argument("--json", action="store_true")
-    ap.add_argument("--config", default=None)
-    ap.add_argument("--prior", default=None)
+    ap = argparse.ArgumentParser(
+        description="SkillHub TRACE 5-dimension evaluation.")
+    ap.add_argument("target", help="Skill directory or path to SKILL.md")
+    ap.add_argument("--json", action="store_true", help="Output JSON")
+    ap.add_argument("--config", default=None, help="Path to config.json")
+    ap.add_argument("--prior", default=None, help="Prior trace.json for delta comparison")
     args = ap.parse_args()
 
-    cfg = C.read_config(args.config)
-    weights = cfg.get("weights", {})
-    skill = C.load_skill(args.target)
-    body = skill["body"]
-    art = load_artifacts(skill["dir"])
+    try:
+        cfg = C.read_config(args.config)
+        weights = cfg.get("weights", {})
+        skill = C.load_skill(args.target)
+        body = skill["body"]
+        art = load_artifacts(skill["dir"])
 
-    dims = {}
-    evidence = {}
-    for dim, fn in DIM_METRICS.items():
-        ms = fn(skill, body, art)
-        dims[dim] = {"score": dim_score(ms), "metrics": {k: round(v, 2) for k, v in ms.items()}}
-        for k, v in ms.items():
-            if v < 1.0:
-                evidence.setdefault(dim, {})[k] = "metric score %.2f" % v
+        dims = {}
+        evidence = {}
+        for dim, fn in DIM_METRICS.items():
+            ms = fn(skill, body, art)
+            dims[dim] = {"score": dim_score(ms), "metrics": {k: round(v, 2) for k, v in ms.items()}}
+            for k, v in ms.items():
+                if v < 1.0:
+                    evidence.setdefault(dim, {})[k] = "metric score %.2f" % v
 
-    overall = 0.0
-    for dim in dims:
-        w = weights.get(dim, 0.2)
-        overall += dims[dim]["score"] * w
-    overall = round(overall, 1)
+        overall = 0.0
+        for dim in dims:
+            w = weights.get(dim, 0.2)
+            overall += dims[dim]["score"] * w
+        overall = round(overall, 1)
 
-    weakest = min(dims, key=lambda d: dims[d]["score"])
-    critical = [d for d in dims if dims[d]["score"] < 50]
-    g = grade(overall)
+        weakest = min(dims, key=lambda d: dims[d]["score"])
+        critical = [d for d in dims if dims[d]["score"] < 50]
+        g = grade(overall)
 
-    result = {
-        "overall": overall, "grade": g, "dimensions": dims,
-        "weakest_dimension": weakest, "critical_gaps": critical,
-        "evidence": evidence,
-    }
+        result = {
+            "ok": True,
+            "overall": overall, "grade": g, "dimensions": dims,
+            "weakest_dimension": weakest, "critical_gaps": critical,
+            "evidence": evidence,
+        }
 
-    prior = None
-    if args.prior and os.path.isfile(args.prior):
-        try:
-            prior = json.load(open(args.prior, encoding="utf-8"))
-        except Exception:
-            prior = None
-    if prior:
-        result["delta"] = round(overall - prior.get("overall", 0), 1)
-        result["prior_overall"] = prior.get("overall")
+        prior = None
+        if args.prior and os.path.isfile(args.prior):
+            try:
+                prior = json.load(open(args.prior, encoding="utf-8"))
+            except Exception:
+                prior = None
+        if prior:
+            result["delta"] = round(overall - prior.get("overall", 0), 1)
+            result["prior_overall"] = prior.get("overall")
+    except Exception as e:
+        code, message, next_step = C.humanize_error(e, "trace_eval")
+        _emit(code, message, next_step, args.json)
+        sys.exit(1)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

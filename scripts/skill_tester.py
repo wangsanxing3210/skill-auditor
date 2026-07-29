@@ -112,39 +112,59 @@ def merge_results(plan, results_path):
     return plan
 
 
+def _emit(code, message, next_step, json_mode, human_mode):
+    if json_mode:
+        print(json.dumps({"ok": False, "error": {"code": code, "message": message, "next_step": next_step}},
+                         ensure_ascii=False, indent=2))
+    else:
+        print("[%s] %s" % (code, message))
+        if next_step:
+            print("下一步: %s" % next_step)
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("target")
-    ap.add_argument("--plan-only", action="store_true", help="只生成测试用例，不跑静态检查")
-    ap.add_argument("--run", action="store_true", help="执行静态检查（真实）")
-    ap.add_argument("--model-config", default=None, help="模型配置 JSON（供 agent 执行用例时读取；脚本仅校验格式）")
+    ap = argparse.ArgumentParser(
+        description="Automated testing: static integrity + boundary/accuracy test-plan generation.")
+    ap.add_argument("target", help="Skill directory or path to SKILL.md")
+    ap.add_argument("--plan-only", action="store_true",
+                    help="只生成边界/准确性用例，不跑静态检查")
+    ap.add_argument("--run", action="store_true",
+                    help="执行静态完整性检查（零配置即可运行）")
+    ap.add_argument("--model-config", default=None,
+                    help="模型配置 JSON（可选；仅在你想自动执行模型测试时使用）")
     ap.add_argument("--merge-results", default=None, help="合并已执行的用例结果 JSON")
     ap.add_argument("--json", action="store_true", help="输出 JSON（默认即为 JSON）")
     ap.add_argument("--human", action="store_true", help="人类可读输出")
     args = ap.parse_args()
 
-    skill = C.load_skill(args.target)
+    try:
+        skill = C.load_skill(args.target)
 
-    model_cfg = None
-    if args.model_config:
-        try:
-            with open(args.model_config, "r", encoding="utf-8") as f:
-                model_cfg = json.load(f)
-        except Exception as e:
-            print("model-config 读取失败: %s" % e, file=sys.stderr)
-            sys.exit(2)
+        model_cfg = None
+        if args.model_config:
+            try:
+                with open(args.model_config, "r", encoding="utf-8") as f:
+                    model_cfg = json.load(f)
+            except Exception as e:
+                raise C.GuardError("E_MODEL_CONFIG", "model-config 读取失败: %s" % e,
+                                   "检查文件路径与 JSON 格式，或先省略 --model-config 跑静态测试") from e
 
-    static = [] if args.plan_only else static_tests(skill)
-    cases = build_plan(skill)
+        static = [] if args.plan_only else static_tests(skill)
+        cases = build_plan(skill)
 
-    if args.merge_results:
-        cases = merge_results(cases, args.merge_results)
+        if args.merge_results:
+            cases = merge_results(cases, args.merge_results)
+    except Exception as e:
+        code, message, next_step = C.humanize_error(e, "skill_tester")
+        _emit(code, message, next_step, args.json, args.human)
+        sys.exit(1)
 
     passed = sum(1 for s in static if s["status"] == "pass")
     manual = sum(1 for c in cases if c["status"] == "manual")
     executed = sum(1 for c in cases if c["status"] in ("pass", "fail"))
 
     out = {
+        "ok": True,
         "target": skill["dir"],
         "model_config": model_cfg,
         "static": static,

@@ -205,85 +205,116 @@ def apply_phrase_normalize(raw):
     return text, notes
 
 
+def _emit(code, message, next_step, json_mode):
+    if json_mode:
+        print(json.dumps({"ok": False, "error": {"code": code, "message": message, "next_step": next_step}},
+                         ensure_ascii=False, indent=2))
+    else:
+        print("[%s] %s" % (code, message))
+        if next_step:
+            print("下一步: %s" % next_step)
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("target")
-    ap.add_argument("--findings", required=True)
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--aggressive", action="store_true")
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--config", default=None)
+    ap = argparse.ArgumentParser(description="Apply safe optimizations and emit before/after diff.")
+    ap.add_argument("target", help="Skill directory or path to SKILL.md")
+    ap.add_argument("--findings", required=True, help="Path to findings JSON")
+    ap.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
+    ap.add_argument("--aggressive", action="store_true", help="Allow higher-risk strategies")
+    ap.add_argument("--out", default=None, help="Report output path")
+    ap.add_argument("--config", default=None, help="Path to config.json")
+    ap.add_argument("--json", action="store_true", help="Output JSON summary")
     args = ap.parse_args()
 
-    cfg = C.read_config(args.config)
-    skill = C.load_skill(args.target)
-    findings = C.load_findings(args.findings)
+    try:
+        cfg = C.read_config(args.config)
+        skill = C.load_skill(args.target)
+        findings = C.load_findings(args.findings)
 
-    # Build term-unification suggestions (language-aware, identifier-safe).
-    # We recompute here rather than trusting semantic.json to avoid cross-language
-    # rewrites (e.g. '技能' -> 'skill').
-    term_clusters = cfg.get("term_clusters", DEFAULT_TERM_CLUSTERS)
-    suggestions = build_term_suggestions(skill["raw"], term_clusters)
+        # Build term-unification suggestions (language-aware, identifier-safe).
+        # We recompute here rather than trusting semantic.json to avoid cross-language
+        # rewrites (e.g. '技能' -> 'skill').
+        term_clusters = cfg.get("term_clusters", DEFAULT_TERM_CLUSTERS)
+        suggestions = build_term_suggestions(skill["raw"], term_clusters)
 
-    want = strategies_for(findings, cfg, args.aggressive)
+        want = strategies_for(findings, cfg, args.aggressive)
 
-    applied = []
-    new_text = skill["raw"]
-    notes_all = []
-    report_only = []
+        applied = []
+        new_text = skill["raw"]
+        notes_all = []
+        report_only = []
 
-    if "OPT-FRONTMATTER" in want:
-        new_text, n = apply_frontmatter(new_text, skill["dir"])
-        if n:
-            applied.append("OPT-FRONTMATTER"); notes_all += n
-    if "OPT-DEDUP-BLOCK" in want:
-        new_text, n = apply_dedup(new_text)
-        if n:
-            applied.append("OPT-DEDUP-BLOCK"); notes_all += n
-    if "OPT-TERM-UNIFY" in want:
-        new_text, n = apply_term_unify(new_text, suggestions)
-        if n:
-            applied.append("OPT-TERM-UNIFY"); notes_all += n
-    if "OPT-PHRASE-NORMALIZE" in want:
-        new_text, n = apply_phrase_normalize(new_text)
-        if n:
-            applied.append("OPT-PHRASE-NORMALIZE"); notes_all += n
-    for sid in ("OPT-DEADREF-FIX", "OPT-REWRITE-CONFLICT", "OPT-RESTRUCTURE"):
-        if sid in want:
-            report_only.append(sid)
+        if "OPT-FRONTMATTER" in want:
+            new_text, n = apply_frontmatter(new_text, skill["dir"])
+            if n:
+                applied.append("OPT-FRONTMATTER"); notes_all += n
+        if "OPT-DEDUP-BLOCK" in want:
+            new_text, n = apply_dedup(new_text)
+            if n:
+                applied.append("OPT-DEDUP-BLOCK"); notes_all += n
+        if "OPT-TERM-UNIFY" in want:
+            new_text, n = apply_term_unify(new_text, suggestions)
+            if n:
+                applied.append("OPT-TERM-UNIFY"); notes_all += n
+        if "OPT-PHRASE-NORMALIZE" in want:
+            new_text, n = apply_phrase_normalize(new_text)
+            if n:
+                applied.append("OPT-PHRASE-NORMALIZE"); notes_all += n
+        for sid in ("OPT-DEADREF-FIX", "OPT-REWRITE-CONFLICT", "OPT-RESTRUCTURE"):
+            if sid in want:
+                report_only.append(sid)
 
-    if args.dry_run:
-        print("DRY-RUN — would apply: %s" % (applied + report_only))
-        for n in notes_all:
-            print("  • " + n)
-        print("--- unified diff (first 60 lines) ---")
-        diff = difflib.unified_diff(skill["raw"].splitlines(), new_text.splitlines(),
-                                    "before", "after", lineterm="")
-        for i, line in enumerate(diff):
-            if i >= 60:
-                print("  ... (truncated)")
-                break
-            print(line)
-        return
+        if args.dry_run:
+            result = {
+                "ok": True, "dry_run": True,
+                "would_apply": applied, "report_only": report_only, "notes": notes_all,
+            }
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                print("DRY-RUN — would apply: %s" % (applied + report_only))
+                for n in notes_all:
+                    print("  • " + n)
+                print("--- unified diff (first 60 lines) ---")
+                diff = difflib.unified_diff(skill["raw"].splitlines(), new_text.splitlines(),
+                                            "before", "after", lineterm="")
+                for i, line in enumerate(diff):
+                    if i >= 60:
+                        print("  ... (truncated)")
+                        break
+                    print(line)
+            return
 
-    # write back
-    if not args.dry_run:
+        # write back with backup
         backup = skill["skill_md"] + ".bak"
-        with open(backup, "w", encoding="utf-8") as f:
-            f.write(skill["raw"])
-        with open(skill["skill_md"], "w", encoding="utf-8") as f:
-            f.write(new_text)
+        try:
+            with open(backup, "w", encoding="utf-8") as f:
+                f.write(skill["raw"])
+            with open(skill["skill_md"], "w", encoding="utf-8") as f:
+                f.write(new_text)
+        except OSError as e:
+            raise C.GuardError("E_WRITE", "写入优化结果失败: %s" % e,
+                               "检查目标目录写权限，或改用 --dry-run 仅预览") from e
 
-    diff = list(difflib.unified_diff(skill["raw"].splitlines(), new_text.splitlines(),
-                                     "before/SKILL.md", "after/SKILL.md", lineterm=""))
-    report = build_report(skill["dir"], applied, report_only, notes_all, diff, findings)
-    out_path = args.out or os.path.join(skill["dir"], ".skill-audit", "optimization-report.md")
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(report)
-    print("Optimization report written to: %s" % out_path)
-    print("Applied: %s" % (applied or ["(none)"]))
-    print("Report-only (manual): %s" % (report_only or ["(none)"]))
+        diff = list(difflib.unified_diff(skill["raw"].splitlines(), new_text.splitlines(),
+                                         "before/SKILL.md", "after/SKILL.md", lineterm=""))
+        report = build_report(skill["dir"], applied, report_only, notes_all, diff, findings)
+        out_path = args.out or os.path.join(skill["dir"], ".skill-audit", "optimization-report.md")
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(report)
+    except Exception as e:
+        code, message, next_step = C.humanize_error(e, "optimize_apply")
+        _emit(code, message, next_step, args.json)
+        sys.exit(1)
+
+    if args.json:
+        print(json.dumps({"ok": True, "report": out_path, "applied": applied, "report_only": report_only},
+                         ensure_ascii=False, indent=2))
+    else:
+        print("Optimization report written to: %s" % out_path)
+        print("Applied: %s" % (applied or ["(none)"]))
+        print("Report-only (manual): %s" % (report_only or ["(none)"]))
 
 
 def build_report(target, applied, report_only, notes, diff, findings):

@@ -225,17 +225,33 @@ def run_custom(skill, cfg):
     return m.check(skill, {"config": cfg, "thresholds": cfg.get("thresholds", {})}) or []
 
 
+def _emit(code, message, next_step, json_mode):
+    if json_mode:
+        print(json.dumps({"ok": False, "error": {"code": code, "message": message, "next_step": next_step}},
+                         ensure_ascii=False, indent=2))
+    else:
+        print("[%s] %s" % (code, message))
+        if next_step:
+            print("下一步: %s" % next_step)
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("target")
-    ap.add_argument("--json", action="store_true")
-    ap.add_argument("--config", default=None)
+    ap = argparse.ArgumentParser(
+        description="Structural / prompt-quality / efficiency audit of a skill.")
+    ap.add_argument("target", help="Skill directory or path to SKILL.md")
+    ap.add_argument("--json", action="store_true", help="Output JSON")
+    ap.add_argument("--config", default=None, help="Path to config.json")
     args = ap.parse_args()
 
-    cfg = C.read_config(args.config)
-    skill = C.load_skill(args.target)
-    findings = run_builtin(skill, cfg)
-    findings += run_custom(skill, cfg)
+    try:
+        cfg = C.read_config(args.config)
+        skill = C.load_skill(args.target)
+        findings = run_builtin(skill, cfg)
+        findings += run_custom(skill, cfg)
+    except Exception as e:
+        code, message, next_step = C.humanize_error(e, "audit_skill")
+        _emit(code, message, next_step, args.json)
+        sys.exit(1)
 
     # de-dup by (rule_id, location)
     seen = set()
@@ -248,7 +264,7 @@ def main():
         uniq.append(f)
 
     if args.json:
-        print(json.dumps({"target": skill["dir"], "count": len(uniq), "findings": uniq},
+        print(json.dumps({"ok": True, "target": skill["dir"], "count": len(uniq), "findings": uniq},
                          ensure_ascii=False, indent=2))
     else:
         print("Audit findings for %s (%d):" % (skill["dir"], len(uniq)))

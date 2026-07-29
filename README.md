@@ -4,8 +4,9 @@
 
 skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破坏原有能力的前提下，发现结构 / 提示词 / 效率层面的问题，并按发现安全地自动优化。
 
-> **版本 v1.1.0** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
-> 完整用法见 `SKILL.md`：含 **30 秒快速开始**、**能力边界与异常处理**、**示例（Few-shot）**、**常见问题 FAQ**。
+> **版本 v1.2.0** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
+> 完整用法见 `SKILL.md`：含 **触发词速查卡**、**30 秒快速开始**、**能力边界与异常处理**、**示例（Few-shot）**。
+> 遇到卡点查 **`FAQ.md`**；想照着做看 **`COOKBOOK.md`**。
 
 ## 核心能力
 
@@ -20,6 +21,8 @@ skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破�
 ```
 skill-auditor/
 ├── SKILL.md                        # 元 Skill 入口与触发词
+├── FAQ.md                          # 常见问题汇总页
+├── COOKBOOK.md                     # 可照着做的完整场景案例
 ├── scripts/                        # 6 个 stdlib-only Python 脚本
 │   ├── _common.py
 │   ├── audit_skill.py
@@ -54,6 +57,8 @@ skill-auditor/
 - 自动优化**宁可少改，不可改坏**：专有名词 / 标题 / 列表行首等一律跳过重写。
 - 破坏性操作需 `--dry-run` 预览 + 确认，且保留可逆 diff。
 - 规则 / 权重 / 策略 / 阈值均可在 `config.json` 覆盖，并支持 `custom_rules_module` / `custom_strategies_module` 扩展。
+- **零配置开箱可用**：审查、语义分析、TRACE、静态测试无需模型或网络；仅可选的模型测试需 `--model-config`。
+- **大文件与错误兜底**：SKILL.md 超过 512 KB 或正文超过 5 万词时自动降级；所有错误给出明确错误码 + 下一步操作建议。
 
 ## License
 
