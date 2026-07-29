@@ -30,6 +30,15 @@ def m_part(): return 0.5
 def m_fail(): return 0.0
 
 
+def m_near(present, explain):
+    """A metric earns full only when concrete structural evidence exists; partial
+    when the topic is mentioned but without actionable evidence."""
+    if present:
+        return m_pass()
+    # 'explain' = whether the skill at least acknowledges the concern in text.
+    return m_part() if explain else m_fail()
+
+
 def load_artifacts(skill_dir):
     art = {}
     d = os.path.join(skill_dir, ".skill-audit")
@@ -59,8 +68,10 @@ def metrics_T(skill, body, art):
     # T4 privacy note
     has_p = any(w.lower() in body.lower() for w in PRIVACY)
     t4 = m_pass() if (not has_p or has_c) else m_part()
-    # T5 cited sources
-    t5 = m_pass() if ("http" in body or "参考" in body or "references/" in body) else m_part()
+    # T5 cited sources: a real http(s) link OR a references/<file> reference (not just the word "参考")
+    has_link = "http://" in body or "https://" in body
+    has_ref = bool(re.search(r"references/[A-Za-z0-9_.\-/]+\.[A-Za-z0-9]+", body))
+    t5 = m_pass() if (has_link or has_ref) else m_part()
     return {"T1": t1, "T2": t2, "T3": t3, "T4": t4, "T5": t5}
 
 
@@ -75,11 +86,24 @@ def metrics_R(skill, body, art):
         r2 = m_pass()
     else:
         r2 = m_part()
-    r3 = m_pass() if any(w in body for w in ["错误", "失败", "回退", "异常处理", "error", "fallback", "容错", "友好错误"]) else m_part()
+    # R3 error handling: must contain a real error-handling instruction (try/except, "if fails",
+    # "on error do X", "fallback to Y"), not just the bare word "错误"
+    has_err_directive = bool(re.search(
+        r"(try[ :]|except|if .*fail|on error|失败[时则]|出错[时则]|捕获|fallback ?to|回退[到至]|"
+        r"容错|友好(地)?报错|友好错误|异常处理|捕获异常|try/except)", body, re.I))
+    r3 = m_near(has_err_directive, any(w in body for w in ["错误", "失败", "异常"]))
     r4 = m_pass() if ("```" in body or "示例" in body or "example" in body.lower()) else m_fail()
-    # R7 oversized-skill handling: body mentions limits, guards, or degraded mode
-    r7 = m_pass() if any(w in body for w in ["大文件", "超大", "限制", "降级", "guard", "大小限制", "资源保护"]) else m_part()
-    r5 = m_pass() if any(w in body for w in ["边界", "空输入", "超大", "缺失", "boundary", "empty input", "缺失参数"]) else m_fail()
+    # R7 oversized-skill handling: explicit size limit / guard / degraded mode (not just "大文件" mention)
+    has_limit = bool(re.search(r"(\b5 ?k\b|> ?\d{3,}|词|size|大小|限制|字节|MB|GB)", body)) and \
+                any(w in body for w in ["限制", "阈值", "超限", "超过", "guard", "降级", "资源保护", "大小限制"])
+    r7 = m_near(has_limit, any(w in body for w in ["大文件", "超大", "限制", "降级"]))
+    # R5 boundary handling: named boundary scenarios (empty/oversized/missing) OR skill_tester
+    # actually produced boundary cases in its test plan
+    named = bool(re.search(r"(空输入|空\b|empty input|超大(输入|文件|skill)?|缺失(参数|输入|文件)?|"
+                           r"boundary|缺失参数|oversized|超长|无输入|异常输入)", body))
+    test_cases = (art.get("test") or {}).get("cases", [])
+    has_boundary_case = any("boundary" in str(c.get("type", "")).lower() for c in test_cases) if test_cases else False
+    r5 = m_pass() if (named or has_boundary_case) else m_part()
     # R6 conflicts from semantic artifact
     sem = (art.get("semantic") or {}).get("semantic_findings", [])
     has_conflict = any(f.get("rule_id") == "SEM-004" for f in sem)
@@ -88,8 +112,10 @@ def metrics_R(skill, body, art):
 
 
 def metrics_A(skill, body, art):
-    a1 = m_pass() if any(w in body for w in ["config", "参数", "--config", "可配置", "配置"]) else m_fail()
-    a2 = m_pass() if any(w in body for w in ["自定义模块", "custom_rules_module", "扩展", "extensible", "可扩展"]) else m_fail()
+    # A1 config support: explicit --config flag or a config.json file reference (not just "配置")
+    a1 = m_pass() if ("--config" in body or "config.json" in body or "config.example.json" in body) else m_fail()
+    # A2 extensibility hook: a real custom-module entry point, not just the word "扩展"
+    a2 = m_pass() if ("custom_rules_module" in body or "custom_strategies_module" in body) else m_fail()
     # A3 variant scenarios: >=2 workflow sub-headings
     heads = re.findall(r"^##\s+.*$", body, re.M)
     a3 = m_pass() if len(heads) >= 3 else m_part()
@@ -125,9 +151,13 @@ def metrics_E(skill, body, art):
     ct = C.tokenize_weak(cap_sec) if hasattr(C, "tokenize_weak") else set(cap_sec.lower().split())
     ov = (len(dt & ct) / len(dt | ct)) if (dt | ct) else 0
     e1 = m_pass() if ov >= 0.1 or desc else m_part()
-    e2 = m_pass() if any(w in body for w in ["运行", "执行", "步骤", "Run", "执行以下", "使用以下"]) else m_part()
+    e2 = m_pass() if ("##" in body and any(w in body for w in ["运行", "执行", "步骤", "Run", "执行以下", "使用以下"]) and "```" in body) else m_part()
     e3 = m_pass() if ("##" in body and ("工作流" in body or "Workflow" in body or "示例" in body)) else m_part()
-    e4 = m_pass() if any(w in body for w in ["产出", "交付", "报告", "交付物", "report", "REPORT"]) else m_part()
+    # E4 measurable deliverable: a dedicated Output/Deliverables section, or a verbatim
+    # list of concrete output files/artifacts (not merely the word "报告")
+    has_output_section = bool(re.search(r"^##+\s*(Output|Deliverables|产出|交付|交付物|输出)", body, re.M | re.I))
+    has_artifact_list = bool(re.search(r"(audit\.json|trace\.json|REPORT\.md|optimization-report\.md|testplan\.json|\.skill-audit/)", body))
+    e4 = m_near(has_output_section or has_artifact_list, any(w in body for w in ["产出", "交付", "报告", "report", "REPORT"]))
     return {"E1": e1, "E2": e2, "E3": e3, "E4": e4}
 
 

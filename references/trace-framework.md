@@ -47,7 +47,7 @@ E: 0.18
 | T2 | 外部副作用有确认/风险提示（删除/外发/付费前警示） | SKILL.md 文本 |
 | T3 | 无夸大或虚假声明（"100% 准确"等） | SKILL.md 文本 |
 | T4 | 隐私/数据安全说明到位（涉及个人文件时） | SKILL.md 文本 |
-| T5 | 引用来源可溯（外部 API/规范有出处） | SKILL.md 文本 |
+| T5 | 引用来源可溯（真实 `http(s)` 链接，或 `references/<file>` 文件引用；仅出现"参考"二字不计分） | SKILL.md 文本 |
 
 ### R — Reliability 指标
 
@@ -55,17 +55,17 @@ E: 0.18
 |-----------|------|----------|
 | R1 | frontmatter 可解析、必填字段齐全 | audit_skill |
 | R2 | 引用的脚本/参考/资产文件真实存在 | skill_tester 静态 |
-| R3 | 有错误处理/失败回退说明 | SKILL.md 文本 |
+| R3 | 有真实错误处理指令（try/except、if 失败、fallback、回退到 X、捕获异常等；仅出现"错误"二字不计满分） | SKILL.md 文本 |
 | R4 | 示例自洽、可被直接执行 | skill_tester |
-| R5 | 边界输入有应对（空/超大/缺失参数） | skill_tester 边界用例 |
+| R5 | 边界输入有应对：**具名边界场景**（空/超大/缺失参数等）**或** `skill_tester` 实际生成了 boundary 用例 | skill_tester 边界用例 |
 | R6 | 指令无歧义、无内部冲突 | semantic_analyzer |
 
 ### A — Adaptability 指标
 
 | metric_id | 指标 | 检查来源 |
 |-----------|------|----------|
-| A1 | 支持配置（config / 参数） | SKILL.md + config |
-| A2 | 规则/策略可扩展（自定义模块钩子） | SKILL.md 文本 |
+| A1 | 支持配置（显式 `--config` 或 `config.json` 引用；仅出现"配置"二字不计分） | SKILL.md + config |
+| A2 | 规则/策略可扩展（真实钩子 `custom_rules_module` / `custom_strategies_module`；仅出现"扩展"二字不计分） | SKILL.md 文本 |
 | A3 | 覆盖变体场景（多触发词/多任务分支） | SKILL.md 文本 |
 | A4 | 资源用 references/assets 外置，不堆砌正文 | audit_skill 效率 |
 
@@ -85,9 +85,9 @@ E: 0.18
 | metric_id | 指标 | 检查来源 |
 |-----------|------|----------|
 | E1 | description 与实际能力一致（无能力漂移） | skill_tester 准确性用例 |
-| E2 | 指令可操作、有具体产出 | SKILL.md 文本 |
+| E2 | 指令可操作（含带命令的代码围栏 + 动作动词"运行/执行"等；仅出现动词不计满分） | SKILL.md 文本 |
 | E3 | 有关键场景示例 / 工作流 | SKILL.md 文本 |
-| E4 | 有可衡量交付物或成功判据 | SKILL.md 文本 |
+| E4 | 可衡量交付物（专属 Output/Deliverables 标题，或 verbatim 交付物清单如 `*.json`/`.skill-audit/`；仅出现"报告"二字不计满分） | SKILL.md 文本 |
 
 ## 等级映射
 

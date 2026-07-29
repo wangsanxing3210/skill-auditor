@@ -1,6 +1,6 @@
 ---
 name: skill-auditor
-version: 1.3.0
+version: 1.4.0
 description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
 agent_created: true
 ---

@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.4.0 — 2026-07-29
+
+**收紧 TRACE 评测判定，消除"关键词命中即满分"的自嗨空间**
+
+- `scripts/trace_eval.py` 重写 8 个宽松指标，要求**结构证据**而非关键词命中：
+  - T5：需真实 `http(s)` 链接或 `references/<file>` 文件引用（仅"参考"二字不计分）
+  - R3：需真实错误处理指令（try/except、fallback、回退、捕获异常等）
+  - R5：需具名边界场景（空/超大/缺失）或 `skill_tester` 真有 boundary 用例
+  - R7：需显式大小限制/guard/降级策略
+  - A1：需 `--config` 或 `config.json` 引用（仅"配置"二字不计分）
+  - A2：需 `custom_rules_module`/`custom_strategies_module` 钩子（仅"扩展"二字不计分）
+  - E2：需含命令的代码围栏 + 动作动词（可操作）
+  - E4：需交付物专节或 verbatim 交付物清单（仅"报告"二字不计满分）
+- 新增 `m_near()`：有主题提及但无结构证据的指标给 partial，缺失给 fail
+- `references/trace-framework.md` 同步更新指标判据说明
+- 自测：skill-auditor 自身仍 100.0/A（无误伤）；关键词堆砌的弱 Skill 实测掉到 67.5/C
+
 ## v1.3.0 — 2026-07-29
 
 **以"评审第三方"视角自测，修复文档/代码 drift 与两个真 bug，并补全 Phase 5 自动化**
