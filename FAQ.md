@@ -15,6 +15,7 @@
 | 语义分析误报冲突 / 术语不一致 | Q11 |
 | 不知道触发词怎么说 | SKILL.md `## 触发词速查卡` |
 | 想快速提升 TRACE 分 | Q12、COOKBOOK.md |
+| 提示「不支持的文件类型：.gitignore / LICENSE」 | Q13 |
 
 ---
 
@@ -160,6 +161,21 @@ skill-auditor 对敏感项（冲突指令、术语不一致）加了置信度或
 5. **C 规范性**：frontmatter 合规、目录结构清晰、示例完整。
 
 具体修复清单会在审计报告的"最弱维度"部分置顶提示。
+
+---
+
+## Q13：Skill 加载时提示「不支持的文件类型：.gitignore / LICENSE」，需要处理吗？
+
+**通常不需要处理。**
+
+`.gitignore` 和无扩展名的 `LICENSE` 是 GitHub / 仓库级别的元数据文件，不是 Skill 运行所需文件。部分 Skill 宿主（如 WorkBuddy）在加载 Skill 时会跳过它们，属于正常行为，不影响 Skill 功能。
+
+如果你想让宿主不再提示：
+
+- `.gitignore`：不能改名，建议保留（Git 需要它）；
+- `LICENSE`：可改名为 `LICENSE.md`（带扩展名后宿主通常不再跳过），README 中的引用也同步改为 `LICENSE.md`。
+
+skill-auditor 会把这类文件标记为 `STRUCT-014`（low 级别），仅作提示，不强制修复。
 
 ---
 

@@ -144,6 +144,14 @@ def run_builtin(skill, cfg):
     # doc/code flag consistency
     findings += check_doc_arg_consistency(skill, rules)
 
+    # repository metadata files that some skill hosts skip (e.g. .gitignore, LICENSE)
+    for f in files:
+        name = os.path.basename(f)
+        if name == ".gitignore" or (name == "LICENSE" and not os.path.splitext(name)[1]):
+            add("STRUCT-014", "low", "structure", f,
+                "仓库元数据文件 '%s' 可能被 Skill 宿主跳过（不支持的文件类型）" % name,
+                "该文件对 Skill 运行无影响；如希望宿主识别，可改放仓库根目录或改为带扩展名的文件（如 LICENSE.md）")
+
     return findings
 
 

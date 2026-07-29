@@ -1,6 +1,6 @@
 ---
 name: skill-auditor
-version: 1.2.0
+version: 1.2.1
 description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
 agent_created: true
 ---
@@ -349,3 +349,6 @@ A：skill-auditor 对冲突指令加了"请人工复核"提示，不会直接改
 
 **Q12：想快速提升 TRACE 分数，应该先看哪个维度？**
 A：看总分最低的那个维度。通常优先级：R（可靠性，边界处理/错误说明）> T（安全可信）> E（有效性，描述与能力一致）> A（适用性，配置/扩展）> C（规范性，结构/示例）。具体修复清单见审计报告。
+
+**Q13：加载时提示「不支持的文件类型：.gitignore / LICENSE」怎么办？**
+A：这是 Skill 宿主跳过仓库元数据文件的正常提示，不影响 Skill 运行。`.gitignore` 建议保留；`LICENSE` 可改名为 `LICENSE.md` 以避免提示。skill-auditor 会标记为 `STRUCT-014`（low），不强制修复。详见 `FAQ.md` Q13。

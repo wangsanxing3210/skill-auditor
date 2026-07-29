@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1 — 2026-07-29
+
+**处理 Skill 宿主跳过 `.gitignore` / `LICENSE` 的提示**
+
+- 新增审计规则 `STRUCT-014`：检测 `.gitignore` 和无扩展名 `LICENSE`，标记为 low 级别提示，说明这是宿主跳过仓库元数据文件的正常行为。
+- `LICENSE` 重命名为 `LICENSE.md`；README 同步引用，减少 WorkBuddy 等宿主加载时的「不支持的文件类型」警告。
+- 文档补全：`references/audit-rules.md` 加入 STRUCT-014；`FAQ.md` 新增 Q13；`SKILL.md` 内嵌 FAQ 同步 Q13。
+
 ## v1.2.0 — 2026-07-29
 
 **针对 TRACE 4.5/5 评测反馈做冲刺优化，补齐可靠性、规范性、有效性短板**

@@ -34,6 +34,7 @@
 | STRUCT-011 | 无中文/空格路径问题 | low | 路径 ASCII 安全 |
 | STRUCT-012 | 指令用祈使/不定式 | medium | 正文以动词开头，非第二人称 |
 | STRUCT-013 | 文档/脚本参数一致 | high | SKILL.md 演示的 `--flag` 在对应 `scripts/*.py` 中确有 `add_argument` 声明 |
+| STRUCT-014 | 宿主可能跳过的仓库元数据文件 | low | 存在 `.gitignore` / 无扩展名 `LICENSE`；部分 Skill 宿主会跳过，不影响运行 |
 
 ## prompt（提示词质量）
 

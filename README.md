@@ -4,7 +4,7 @@
 
 skill-auditor 把自己当成一把"刀"，专门削其他 Skill——在不破坏原有能力的前提下，发现结构 / 提示词 / 效率层面的问题，并按发现安全地自动优化。
 
-> **版本 v1.2.0** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
+> **版本 v1.2.1** · 框架无关：适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy / OpenClaw 等）。
 > 完整用法见 `SKILL.md`：含 **触发词速查卡**、**30 秒快速开始**、**能力边界与异常处理**、**示例（Few-shot）**。
 > 遇到卡点查 **`FAQ.md`**；想照着做看 **`COOKBOOK.md`**。
 
@@ -39,7 +39,8 @@ skill-auditor/
 │   ├── config.example.json
 │   ├── model-config.example.json
 │   └── report_template.md
-└── .gitignore
+├── LICENSE.md                      # 开源许可（宿主会跳过，不影响 Skill 运行）
+└── .gitignore                      # Git 忽略规则（宿主会跳过，不影响 Skill 运行）
 ```
 
 ## 用法
@@ -62,4 +63,4 @@ skill-auditor/
 
 ## License
 
-见仓库根目录 `LICENSE`。
+见仓库根目录 `LICENSE.md`。
