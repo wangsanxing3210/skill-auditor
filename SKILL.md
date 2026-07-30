@@ -1,11 +1,15 @@
 ---
 name: skill-auditor
-version: 1.5.0
+version: 1.6.0
 description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
 agent_created: true
 ---
 
 # Skill Auditor（元 Skill：审查 · 评测 · 优化）
+
+> **纯本地 · 零网络依赖 · 零配置 · 全中文界面 · 下载即用**
+> 审计 / 评测 / 测试 / 优化全部在本机完成，不上传你的 Skill 内容，不访问外网；审查、语义分析、TRACE 评分、静态测试无需任何模型或网络配置；只有"模型输出测试"是可选且完全可跳过的高级配置。
+> 一行命令拿到完整报告：`python3 scripts/build_report.py <skill_dir>` 即生成 `.skill-audit/REPORT.md`。
 
 ## Overview
 
@@ -25,20 +29,52 @@ the rule set and the auto-apply behavior can be tuned without editing code.
 
 > **安全与伦理声明**：全部分析在本地完成，不联网、不上传你的 Skill 内容；自动优化始终保留可逆 diff 与 `.bak` 备份，绝不静默覆盖。仅"模型测试"阶段需你显式提供 `--model-config`，且该步可完全跳过。
 
-## 触发词速查卡
+## 触发词速查卡（场景 → 说法 → 执行阶段）
 
-| 你想让 skill-auditor 做什么 | 可以直接这样说 | 它会执行的阶段 |
-|----------------------------|----------------|---------------|
-| 审查一个 Skill | "审查一下 ~/.workbuddy/skills/foo" / "帮我看看这个 Skill 写得怎么样" | Phase 0–1 |
-| 跑 TRACE 评分 | "给这个 Skill 做个 TRACE 评测" / "评一下质量" | Phase 2 |
-| 测边界情况 | "测一下这个技能的边界情况" / "空输入/大文件会怎样" | Phase 3 |
-| 优化并预览 | "把提示词里重复的地方合并一下，先给我看看" | Phase 4 dry-run |
-| 确认落盘 | "确认优化" / "就按这个改" | Phase 4 apply |
-| 对比前后 | "对比优化前后改了什么" | Phase 5 |
+| 场景 | 你可以直接这样说 | 它会执行的阶段 |
+|------|----------------|---------------|
+| 审查 | "审查一下 ~/.workbuddy/skills/foo" / "帮我看看这个 Skill 写得怎么样" / "audit this skill" | Phase 0–1 |
+| 评测 | "给这个 Skill 做个 TRACE 评测" / "评一下质量" / "看看能得几分" | Phase 2 |
+| 测试 | "测一下这个技能的边界情况" / "空输入/大文件会怎样" / "会不会崩" | Phase 3 |
+| 优化（预览） | "把提示词里重复的地方合并一下，先给我看看" / "我想优化但别直接改" | Phase 4 dry-run |
+| 优化（落盘） | "确认优化" / "就按这个改" / "apply" | Phase 4 apply |
+| 报告 | "对比优化前后改了什么" / "给我一份 REPORT.md" | Phase 5 |
+| 自审 / 批量 | "帮我看看这个 skill 有没有隐藏 bug" / "把所有 skills 都审一遍" | 全流程 |
 
-> 提示：不需要记特殊命令，用自然语言描述意图即可；skill-auditor 会先澄清模糊点再动手。
+> 提示：不需要记特殊命令，用自然语言描述意图即可；skill-auditor 会先澄清模糊点再动手（参见「能力边界与异常处理 → 澄清问卷」）。
 
-## 30 秒快速开始
+## 目录
+
+- [Overview](#overview)
+- [触发词速查卡](#触发词速查卡场景-说法-执行阶段)
+- [30 秒快速开始](#30-秒快速开始端到端-4-步从-clone-到拿到-reportmd)
+- [When To Use](#when-to-use)
+- [能力边界与异常处理](#能力边界与异常处理)
+- [Design Principles](#design-principles)
+- [Workflow（Phase 0–5）](#workflow)
+- [示例（Few-shot）](#示例few-shot)
+- [Configuration](#configuration)
+- [Extensibility](#extensibility)
+- [Output Artifacts](#output-artifacts)
+- [Scripts Reference](#scripts-reference)
+- [References / Assets 引用表](#references-assets-引用)
+- [常见问题 FAQ](#常见问题-faq)
+- [反模式](#反模式)
+
+配套文档：`FAQ.md`（12 条问答 + 反模式表）、`COOKBOOK.md`（3 个完整场景 + 自然语言使用速查）。
+
+## 30 秒快速开始（端到端 4 步：从 clone 到拿到 REPORT.md）
+
+```bash
+# 1. 进入待审 Skill（示例：~/.workbuddy/skills/foo）
+cd ~/.workbuddy/skills/foo
+
+# 2. 一行命令生成完整报告（无需任何配置）
+python3 ~/.workbuddy/skills/skill-auditor/scripts/build_report.py .
+
+# 3. 查看报告（按严重度排序的发现 + TRACE 五维评分 + 测试结论 + 优化 diff）
+cat .skill-audit/REPORT.md
+```
 
 第一次用，记住三件事：
 
@@ -48,7 +84,7 @@ the rule set and the auto-apply behavior can be tuned without editing code.
 
 **零配置开箱可用**：审查、语义分析、TRACE 评测、静态完整性测试都不需要任何外部模型或网络，下载即用；只有"模型输出测试"才需要可选的 `--model-config`。
 
-**稳定性与资源保护**：SKILL.md 超过 512 KB 或正文超过 5 万词时，语义分析会自动降级为"采样模式"，避免占用过多内存；所有错误都会给出明确错误码 + 下一步操作建议，不会直接崩溃。
+**稳定性与资源保护**：SKILL.md 超过 512 KB 或正文超过 3 万词 / 3000 句时，语义分析会自动降级为"采样模式"（开头/中间/结尾三段均匀采样），并明确告诉你覆盖了哪些句段；所有错误都会给出明确的"原因 + 下一步操作建议"，不会直接崩溃。
 
 > **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要完整场景案例看 `COOKBOOK.md` → 遇到卡点查 `FAQ.md` → 自定义看 `## Configuration`。
 
@@ -256,6 +292,29 @@ Write the report to `<target>/.skill-audit/REPORT.md` and present it.
 - **技能动作**：Phase 4 → `--dry-run` 预览 diff；用户确认后再 `--out` 落盘 + `.bak` 备份。
 - **关键产出**：修改前/后对比 + 统一 diff，全部可回退。
 
+### 示例 4 · 多轮澄清（用户模糊 → 追问 → 执行）
+
+当你的需求信息不完整时，skill-auditor 会先问、再动手，而不是默认猜：
+
+- **用户**："帮我看看这个 skill"（没说哪个 skill）
+- **技能**："可以。请告诉我 Skill 的目录路径（带 SKILL.md 的那个）——也可以直接说 ~/.workbuddy/skills/xxx 这样的相对路径。"
+- **用户**："那你看下 foo 吧，顺便优化一下"
+- **技能**："好的。是要先 dry-run 预览差异再让你确认，还是我直接落盘？另外 foo 是 user scope 还是 project scope？"
+- **用户**："先预览，user scope"
+- **技能动作**：Phase 1 + Phase 4 dry-run；输出 diff 摘要等用户确认。
+
+### 示例 5 · 自审自优（skill-auditor 审计自身）
+
+- **用户输入**："skill-auditor 自己有没有隐藏 bug？"
+- **技能动作**：对自身跑 Phase 0–5（标准自检流程）。
+- **关键产出**：本仓库 `.skill-audit/REPORT.md` 是一次自检实例，audit 仅报预期的 `STRUCT-014`（`.gitignore` 被宿主跳过），TRACE 仍 100.0 / A。
+- **如何复现**：
+
+  ```bash
+  cd ~/.workbuddy/skills/skill-auditor
+  python3 scripts/build_report.py .   # 一行命令拿到自审报告
+  ```
+
 ## Configuration
 
 All extensibility lives in a JSON config (copy `assets/config.example.json` to
@@ -354,7 +413,7 @@ A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检
 A：每个错误码都附带"下一步"建议。例如 `E_TOO_LARGE` 表示 SKILL.md 超过 512 KB，建议把细节移到 `references/`；`E_NO_SKILL_MD` 表示路径不对。按提示操作即可，无需翻源码。
 
 **Q9：我的 SKILL.md 很大（几千行），会不会卡住？**
-A：不会。正文超过 5 万词或 SKILL.md 超过 512 KB 时，语义分析会自动进入"采样模式"：只分析前 2000 句，跳过全量 O(n²) 检查，并产出提示告诉你降级了。
+A：不会。SKILL.md 超过 512 KB 时直接给出友好提示；正文超过 3 万词 或 3000 句时，语义分析自动进入"三段均匀采样模式"（开头/中间/结尾各约 500 句，共 1500 句），并明确告诉你覆盖了哪些句段。
 
 **Q10：完整测试一定要配 `--model-config` 吗？**
 A：不是必须的。静态完整性测试（引用是否存在、frontmatter 是否合法、代码围栏是否配对等）零配置即可跑；只有"把测试用例交给真实模型执行"这一步才需要 `--model-config`，且可以跳过。
@@ -367,3 +426,43 @@ A：看总分最低的那个维度。通常优先级：R（可靠性，边界处
 
 **Q13：加载时提示「不支持的文件类型：.gitignore / LICENSE」怎么办？**
 A：这是 Skill 宿主跳过仓库元数据文件的正常提示，不影响 Skill 运行。`.gitignore` 建议保留；`LICENSE` 可改名为 `LICENSE.md` 以避免提示。skill-auditor 会标记为 `STRUCT-014`（low），不强制修复。详见 `FAQ.md` Q13。
+
+**Q14：常见的反模式有哪些？**
+A：见下方「反模式」表（10 条 + 修复方向），以及 `FAQ.md` Q14 的"错误写法 vs 修复后"对照示例。
+
+**Q15：能不能一次性审多个 Skill？**
+A：可以。批量审查的最小脚本：
+
+```bash
+for d in ~/.workbuddy/skills/*/; do
+  [ -f "$d/SKILL.md" ] && python3 ~/.workbuddy/skills/skill-auditor/scripts/build_report.py "$d"
+done
+```
+每个 Skill 会在自己的 `.skill-audit/REPORT.md` 生成报告；汇总比较可用：
+
+```bash
+for d in ~/.workbuddy/skills/*/; do
+  [ -f "$d/.skill-audit/trace.json" ] && \
+    echo "$(basename $d): $(python3 -c "import json;print(json.load(open('$d/.skill-audit/trace.json'))['overall'])")"
+done
+```
+
+**Q16：在哪能跟踪 skill-auditor 的版本变更？**
+A：`CHANGELOG.md` 记录每次发布的功能改动、bug 修复与已知局限；当前版本见 `SKILL.md` frontmatter 的 `version` 字段；同步镜像在 GitHub `wangsanxing3210/skill-auditor`。
+
+## 反模式
+
+下表是评审中最常见的 10 类问题——左边是典型错误写法，右边是修复方向。详细对比示例见 `FAQ.md` Q14。
+
+| # | 反模式 | 为什么扣分 | 修复方向 |
+|---|--------|-----------|----------|
+| 1 | description 只写"这是一个 XX 工具"，没讲何时用 | C / E 低 | 加入 WHEN 触发场景 + 典型用户说法 |
+| 2 | 触发词只堆关键词 | A 低 | 改成场景→说法→执行阶段映射表 |
+| 3 | 边界处理只有口号 | R 低 | 列空输入/超大/缺失的具体应对话术 |
+| 4 | 示例不可执行 | R / C 低 | 用可复制的 `\`\`\`bash` 代码块 |
+| 5 | 错误提示只有代码 | R 低 | 用"原因 + 下一步"人话话术 |
+| 6 | 文档全是命令行，无自然语言示例 | A / C 低 | 加对话式使用场景速查 |
+| 7 | 所有细节堆在 SKILL.md 正文 | C 低 | 外置到 `references/`，正文只留流程 |
+| 8 | 含"100% 准确""永远不会错" | T 低 | 改成可验证表述 |
+| 9 | 命令参数与脚本实际声明不一致 | R / C 低 | 保持文档与代码一致（参考 STRUCT-013） |
+| 10 | 优化时无备份、无 diff、无回退 | T / R 低 | 默认 dry-run + `.bak` 备份 + 统一 diff |

@@ -63,8 +63,11 @@ def metrics_T(skill, body, art):
     has_d = any(w.lower() in body.lower() for w in DESTRUCTIVE)
     has_c = any(w.lower() in body.lower() for w in CAUTION)
     t2 = m_pass() if (not has_d or has_c) else m_part()
-    # T3 exaggeration
-    t3 = m_fail() if any(w.lower() in body.lower() for w in EXAGG) else m_pass()
+    # T3 exaggeration: skip code fences and inline code so quoted examples
+    # (e.g. anti-pattern tables that cite "100% 准确" as a bad example) don't
+    # trigger a false positive.
+    body_no_code = C.strip_code_fences(body)
+    t3 = m_fail() if any(w.lower() in body_no_code.lower() for w in EXAGG) else m_pass()
     # T4 privacy note
     has_p = any(w.lower() in body.lower() for w in PRIVACY)
     t4 = m_pass() if (not has_p or has_c) else m_part()

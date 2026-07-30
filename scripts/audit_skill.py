@@ -175,8 +175,16 @@ def run_builtin(skill, cfg):
     return findings
 
 
+def _slugify_anchor(text):
+    return C.slugify_anchor(text)
+
+
 def re_anchor(body):
-    return re.findall(r"^#{1,6}\s+.*?(?:\n|$)", body, re.M)
+    """Return set of GitHub-style heading anchors present in body."""
+    out = set()
+    for m in re.finditer(r"^#{1,6}\s+(.+?)\s*$", body, re.M):
+        out.add(_slugify_anchor(m.group(1)))
+    return out
 
 
 def parse_declared_flags(path):

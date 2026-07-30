@@ -233,6 +233,29 @@ def referenced_paths(body):
     return sorted(set(found))
 
 
+def slugify_anchor(text):
+    """GitHub-compatible heading anchor slug: lowercase, spaces->'-', keep
+    [\\w-] (incl. CJK), drop everything else, collapse hyphens, strip ends."""
+    s = (text or "").strip().lower()
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"[^\w\-]", "", s, flags=re.UNICODE)
+    s = re.sub(r"-+", "-", s).strip("-")
+    return s
+
+
+def strip_code_fences(text):
+    """Remove fenced code blocks (``` ... ```) and inline code (`...`) so that
+    quoted example content (which may legitimately contain trigger tokens)
+    doesn't trip keyword-based checks like T3 (exaggeration)."""
+    if not text:
+        return ""
+    # fenced blocks
+    text = re.sub(r"```.*?```", " ", text, flags=re.S)
+    # inline code
+    text = re.sub(r"`[^`]+`", " ", text)
+    return text
+
+
 def tokenize_weak(text):
     """Lightweight token set for overlap checks (ascii words + cjk chars)."""
     text = (text or "").lower()

@@ -40,12 +40,10 @@ def static_tests(skill):
     fences = body.count("```")
     add("ST-03", "代码围栏配对", fences % 2 == 0,
         "ok" if fences % 2 == 0 else "存在未闭合的 ``` (%d 个)" % fences)
-    # ST-anchors
+    # ST-anchors: use GitHub-compatible slugify so CJK headings and punctuation
+    # match the link anchors the doc actually uses.
     heads = re.findall(r"^#{1,6}\s+(.+)$", body, re.M)
-    anchors = set()
-    for h in heads:
-        a = re.sub(r"[^\w\-]", "-", h.strip().lower())
-        anchors.add(a)
+    anchors = {C.slugify_anchor(h) for h in heads}
     broken = re.findall(r"\]\(#([\w\-]+)\)", body)
     broken = [b for b in broken if b not in anchors]
     add("ST-04", "内部锚点可解析", not broken,
