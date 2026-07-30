@@ -10,8 +10,9 @@ import re
 
 # Resource guards: keep the tool responsive on oversized skills.
 MAX_SKILL_BYTES = 512 * 1024          # ~512 KB SKILL.md soft cap
-MAX_SENTENCES = 2_000                 # semantic analyzer early-exit threshold
-MAX_BODY_WORDS_FOR_HEAVY = 50_000     # above this, skip O(n^2) heavy checks
+MAX_SENTENCES = 1_500                 # semantic analyzer sample budget per run
+MAX_BODY_WORDS_FOR_HEAVY = 30_000     # above this, switch to sampled analysis
+MAX_SENTENCES_BEFORE_HEAVY = 3_000    # above this sentence count, also sample
 
 DEFAULT_CONFIG = {
     "rules": {},
@@ -36,20 +37,49 @@ class GuardError(Exception):
 
 
 def humanize_error(exc, tool_name="skill-auditor"):
-    """Convert common exceptions into plain-language messages + next steps."""
+    """Convert common exceptions into plain-language messages + next steps.
+
+    The returned message is aimed at end users who may not be technical. The
+    optional internal error code is still returned but not embedded in the text.
+    """
     if isinstance(exc, GuardError):
+        # GuardError already carries user-friendly wording; just keep it.
         return exc.code, str(exc), exc.next_step
     if isinstance(exc, FileNotFoundError):
-        return "E_NOT_FOUND", "找不到目标 Skill 或 SKILL.md", "请确认路径正确，或给出包含 SKILL.md 的目录"
+        return (
+            "E_NOT_FOUND",
+            "没找着目标 Skill。你指定的路径里似乎没有 SKILL.md。",
+            "请检查一下路径：如果是目录，确保里面包含 SKILL.md；也可以直接拖进 SKILL.md 的完整路径。",
+        )
     if isinstance(exc, PermissionError):
-        return "E_PERMISSION", "没有权限读取/写入该路径", "检查文件权限，或换一个你有写权限的目录"
+        return (
+            "E_PERMISSION",
+            "当前账号没法读/写这个路径，通常是权限不够。",
+            "换个有权限的目录，或者在命令行用 ls -la 看看当前用户是否有读写权限。",
+        )
     if isinstance(exc, json.JSONDecodeError):
-        return "E_BAD_JSON", "JSON 配置文件解析失败（%s 附近）" % exc.lineno, "用 JSON 校验器检查 config / model-config 文件格式"
+        return (
+            "E_BAD_JSON",
+            "配置文件格式不对，JSON 在第 %s 行附近解析失败了。" % exc.lineno,
+            "常见原因是多了/少了逗号、引号没成对。可以用任意 JSON 校验器（如 json.cn）粘贴检查。",
+        )
     if isinstance(exc, UnicodeDecodeError):
-        return "E_ENCODING", "文件编码不是 UTF-8，无法读取", "将 SKILL.md 转为 UTF-8 编码后再试"
+        return (
+            "E_ENCODING",
+            "文件编码识别不了。skill-auditor 只认 UTF-8 编码的文本。",
+            "用编辑器把 SKILL.md / 配置文件另存为'UTF-8 无 BOM'后再试一次。",
+        )
     if isinstance(exc, MemoryError):
-        return "E_MEMORY", "系统内存不足，无法处理该文件", "关闭其他程序，或换一台内存更大的机器；也可拆分 SKILL.md"
-    return "E_UNEXPECTED", "运行中遇到意外错误: %s" % exc, "请重试；若持续出现，请截图错误信息反馈"
+        return (
+            "E_MEMORY",
+            "内存不够用了，文件太大导致处理到一半卡住。",
+            "先关掉其他占用内存的程序；或者把 SKILL.md 拆成多个 references/ 文件，只留核心内容在正文。",
+        )
+    return (
+        "E_UNEXPECTED",
+        "运行中出了点意外，工具没料到这种情况。",
+        "可以重试一下；如果每次必现，请把完整报错和用到的命令一起反馈。",
+    )
 
 
 def safe_read_text(path, label="文件"):
@@ -62,18 +92,18 @@ def safe_read_text(path, label="文件"):
     if size > MAX_SKILL_BYTES:
         raise GuardError(
             "E_TOO_LARGE",
-            "%s 大小 %.1f KB，超过当前限制 %.1f KB" % (label, size / 1024, MAX_SKILL_BYTES / 1024),
-            "① 精简 SKILL.md 正文，把细节移到 references/；② 或在 config.json 中提高阈值（advanced）"
+            "%s 有点大（%.1f KB），超过了当前 %.1f KB 的处理限制。" % (label, size / 1024, MAX_SKILL_BYTES / 1024),
+            "① 精简 SKILL.md 正文，把细节移到 references/；② 或在 config.json 中提高阈值（advanced）。"
         )
     try:
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
     except UnicodeDecodeError as e:
-        raise GuardError("E_ENCODING", "%s 编码错误: %s" % (label, e),
-                         "将文件保存为 UTF-8 无 BOM 格式后再试") from e
+        raise GuardError("E_ENCODING", "%s 编码识别不了。skill-auditor 只认 UTF-8 编码的文本。" % label,
+                         "用编辑器把文件另存为'UTF-8 无 BOM'后再试一次。") from e
     except OSError as e:
-        raise GuardError("E_READ", "读取 %s 失败: %s" % (label, e),
-                         "检查文件权限与磁盘状态") from e
+        raise GuardError("E_READ", "%s 读取出错了：%s" % (label, e),
+                         "检查文件权限与磁盘状态，或换一个路径重试。") from e
 
 
 def find_skill_md(target):
@@ -119,8 +149,8 @@ def load_skill(target):
     if not path:
         raise GuardError(
             "E_NO_SKILL_MD",
-            "在 '%s' 下找不到 SKILL.md" % target,
-            "请给出 Skill 目录（含 SKILL.md）或直接给出 SKILL.md 的完整路径"
+            "没找着目标 Skill。你指定的路径 '%s' 里似乎没有 SKILL.md。" % target,
+            "请检查一下路径：如果是目录，确保里面包含 SKILL.md；也可以直接拖进 SKILL.md 的完整路径。"
         )
     skill_dir = os.path.dirname(path)
     raw = safe_read_text(path, label="SKILL.md")

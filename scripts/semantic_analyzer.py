@@ -73,12 +73,35 @@ def split_sentences(body):
     return out
 
 
+def sample_sentences_for_heavy(sents, budget=C.MAX_SENTENCES):
+    """Return a representative sample of sentences for oversized skills.
+
+    Rather than only scanning the first part, we take proportional slices from
+    the beginning, middle, and end so late sections are not silently ignored.
+    """
+    n = len(sents)
+    if n <= budget:
+        return sents, [(0, n)]
+    # keep head, mid, tail; each third gets budget/3 sentences
+    third = budget // 3
+    head = sents[:third]
+    mid_start = max(third, (n - third) // 2)
+    mid = sents[mid_start:mid_start + third]
+    tail_start = n - third
+    tail = sents[tail_start:]
+    sampled = head + mid + tail
+    ranges = [(0, third), (mid_start, mid_start + len(mid)), (tail_start, n)]
+    return sampled, ranges
+
+
 def near_dup_sentences(sents, th, minlen, heavy=False):
     findings = []
     n = len(sents)
     if heavy:
-        # For oversized skills, sample only the first portion to stay responsive.
-        n = min(n, C.MAX_SENTENCES)
+        sents, ranges = sample_sentences_for_heavy(sents)
+        n = len(sents)
+    else:
+        ranges = None
     for i in range(n):
         if len(sents[i]) < minlen:
             continue
@@ -101,8 +124,8 @@ def near_dup_sentences(sents, th, minlen, heavy=False):
                     "SKILL.md", "近义重复句(相似度 %.2f): '%s' ≈ '%s'" % (sc, sents[i][:40], sents[j][:40]),
                     "合并为一条表述"))
             if len(findings) >= 20:
-                return findings
-    return findings
+                return findings, ranges
+    return findings, ranges
 
 
 def repeated_phrases(body, min_count):
@@ -229,20 +252,22 @@ def main():
         raw = C.safe_read_text(args.skill_md, label="SKILL.md")
         _, body, _ = C.parse_frontmatter(raw)
         heavy = C.body_too_heavy(body)
-        if heavy:
-            note = C.make_finding(
-                "SEM-INFO", "low", "semantic", "SKILL.md",
-                "正文超过 %d 词，已启用大文件降级模式（仅分析前 %d 句，跳过全量 O(n²) 检查）" % (
-                    C.MAX_BODY_WORDS_FOR_HEAVY, C.MAX_SENTENCES),
-                "如需完整分析，请拆分正文到 references/ 或减少字数")
-        else:
-            note = None
 
         sents = split_sentences(body)
+        # Guard against many-short-sentence files too.
+        if len(sents) > C.MAX_SENTENCES_BEFORE_HEAVY:
+            heavy = True
         findings = []
-        if note:
-            findings.append(note)
-        findings += near_dup_sentences(sents, dup_j, minlen, heavy=heavy)
+        if heavy:
+            sents, dup_ranges = sample_sentences_for_heavy(sents, budget=C.MAX_SENTENCES)
+            sampled_blocks = ["第 %d–%d 句" % (start + 1, end) for start, end in dup_ranges]
+            reason = "正文超过 %d 词" % C.MAX_BODY_WORDS_FOR_HEAVY if C.body_too_heavy(body) else "句子数超过 %d" % C.MAX_SENTENCES_BEFORE_HEAVY
+            findings.append(C.make_finding(
+                "SEM-INFO", "low", "semantic", "SKILL.md",
+                "%s，已启用大文件采样模式（覆盖 %s；未覆盖部分请自行检查）" % (
+                    reason, "、".join(sampled_blocks)),
+                "如需完整分析，请拆分正文到 references/ 或减少字数"))
+        findings += near_dup_sentences(sents, dup_j, minlen, heavy=heavy)[0]
         if not heavy:
             findings += repeated_phrases(body, rep_min)
         clusters = cfg.get("term_clusters", DEFAULT_CLUSTERS)

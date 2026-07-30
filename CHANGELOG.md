@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.5.0 — 2026-07-30
+
+**针对评测报告短板定向优化：提升可靠性、规范性与文档友好度**
+
+- **错误提示人话化**（`scripts/_common.py`）：所有 GuardError 与 humanize_error 输出改为非技术用户能懂的三段式（简单说明 + 原因 + 下一步），避免"E_TOO_LARGE"这类纯代码式提示。
+- **实现 OPT-TRIGGER 自动补全触发词**（`scripts/optimize_apply.py`）：当 `PROMPT-001` 触发（缺少触发词）时，自动从 description + 能力描述抽取关键词，在 frontmatter 后插入「触发词速查卡」草案（dry-run 可预览）。
+- **大文件语义分析提速 + 精确化**（`scripts/_common.py`、`scripts/semantic_analyzer.py`）：
+  - 采样阈值从 5 万词/前 2000 句收紧为 3 万词 或 3000 句 / 共 1500 句；
+  - 从"只采开头"改为"开头、中间、结尾三段均匀采样"，并在 SEM-INFO 中明确标注覆盖区间；
+  - 实测 4.4 万词/1.1 万句文件从数分钟挂起降到 5 秒内完成。
+- **文档补齐自然语言示例与错误对比**（`FAQ.md`、`COOKBOOK.md`）：新增 COOKBOOK「自然语言使用速查」、FAQ Q14「错误写法 → 修复后」对照表、更新 Q9 采样说明，降低文档的命令行倾向。
+- **自检结果**：py_compile 全过；自身 audit 仅 STRUCT-014；TRACE 100.0/A；静态 5/5；OPT-TRIGGER、人话错误、大文件采样均单独验证通过。
+
 ## v1.4.0 — 2026-07-29
 
 **收紧 TRACE 评测判定，消除"关键词命中即满分"的自嗨空间**

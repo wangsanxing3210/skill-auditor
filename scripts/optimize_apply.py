@@ -22,6 +22,7 @@ import _common as C
 
 STRATEGY_TABLE = {
     "OPT-FRONTMATTER": {"rules": ["STRUCT-001", "STRUCT-002", "STRUCT-003", "STRUCT-004"], "risk": "safe"},
+    "OPT-TRIGGER": {"rules": ["PROMPT-001"], "risk": "safe"},
     "OPT-DEDUP-BLOCK": {"rules": ["EFF-001"], "risk": "safe"},
     "OPT-SEM-DEDUP": {"rules": ["SEM-001", "SEM-002"], "risk": "safe"},
     "OPT-TERM-UNIFY": {"rules": ["SEM-003"], "risk": "safe"},
@@ -158,6 +159,59 @@ def apply_frontmatter(raw, skill_dir):
     return "\n".join(lines) + "\n" + body, notes
 
 
+def _extract_capability_phrases(body):
+    """Pull likely capability verbs/nouns from the skill body for trigger-word hints."""
+    # Look at the first real paragraph after frontmatter
+    cap = body.strip().split("\n\n")[0] if body.strip() else ""
+    # Extract short verb+noun or noun chunks
+    cands = []
+    # Chinese: 2–5 char chunks around action verbs
+    for m in re.finditer(r"(?:审查|评测|测试|优化|生成|检查|分析|帮助|辅助|自动)[\u4e00-\u9fa5A-Za-z0-9_\-/]{1,12}", cap):
+        cands.append(m.group(0))
+    # English: verb + noun phrases
+    for m in re.finditer(r"\b(audit|review|test|optimize|generate|check|analyze|help|assist|auto)[\w\-/ ]{1,20}", cap, re.I):
+        cands.append(m.group(0).strip())
+    return list(dict.fromkeys(c))[:6] if (c := cands) else []
+
+
+def apply_trigger_words(raw):
+    """When PROMPT-001 fires (no explicit triggers), insert a trigger-word quick-reference
+    section right after the frontmatter. Uses description + capability text to seed hints."""
+    fm, body, ok = C.parse_frontmatter(raw)
+    desc = str(fm.get("description", "")).strip()
+    seed = desc or ""
+    if len(seed) > 80:
+        seed = seed[:80] + "..."
+    hints = _extract_capability_phrases(body)
+    if seed and seed not in hints:
+        hints.insert(0, seed)
+    if not hints:
+        hints = ["<请根据技能能力补充 3–5 条典型用户说法>"]
+    lines = [
+        "",
+        "## 触发词速查卡",
+        "",
+        "以下说法可以直接唤起本技能：",
+        "",
+    ]
+    for h in hints[:5]:
+        lines.append("- %s" % h)
+    lines.append("- 帮我 %s" % hints[0])
+    lines.append("- 请你对这个 skill 做 %s" % (hints[0] if len(hints) == 1 else hints[1] if len(hints) > 1 else "审查"))
+    lines.append("")
+    block = "\n".join(lines)
+    if ok:
+        # Insert right after the frontmatter closing '---'.
+        # raw starts with '---\n...\n---\n<body>'. Find the second '---'.
+        first = raw.find("---")
+        second = raw.find("---", first + 1)
+        insert_at = raw.find("\n", second) + 1 if second != -1 else len(raw)
+        new_raw = raw[:insert_at] + block + raw[insert_at:]
+    else:
+        new_raw = block.lstrip("\n") + raw
+    return new_raw, ["自动补全「触发词速查卡」（基于 description + 能力描述生成，请人工审校）"]
+
+
 def apply_dedup(raw):
     lines = raw.splitlines()
     out = []
@@ -250,6 +304,10 @@ def main():
             new_text, n = apply_frontmatter(new_text, skill["dir"])
             if n:
                 applied.append("OPT-FRONTMATTER"); notes_all += n
+        if "OPT-TRIGGER" in want:
+            new_text, n = apply_trigger_words(new_text)
+            if n:
+                applied.append("OPT-TRIGGER"); notes_all += n
         if "OPT-DEDUP-BLOCK" in want:
             new_text, n = apply_dedup(new_text)
             if n:
