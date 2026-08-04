@@ -1,7 +1,7 @@
 ---
 name: skill-auditor
-version: 1.6.0
-description: 'Meta-skill for auditing, testing, and optimizing any other skill — framework-agnostic, not bound to a single agent tool. Works on SKILL.md-based skills from WorkBuddy, OpenClaw, and similar frameworks. Use when the user asks to review / audit / improve / optimize a SKILL.md, evaluate a skill''s quality, find redundant or inconsistent prompts, test a skill''s boundary cases, run a TRACE evaluation, or produce a before/after comparison report of skill changes. Triggers include "审查这个Skill", "优化 SKILL.md", "给这个 Skill 做个 TRACE 评测", "测一下这个技能的边界情况", "Skill 提示词冗余检测", "对比优化前后".'
+version: 1.7.0
+description: '用于审查、评测、测试、优化其他任何 Skill 的元技能（meta-skill），不限定具体工具框架，适用于 WorkBuddy、OpenClaw 等所有基于 SKILL.md 的 Skill。当用户需要审查/评测/优化某个 SKILL.md、评估技能质量、查找冗余或不一致的提示词、测试技能的边界情况、运行 TRACE 五维评测，或生成技能改动的前后对比报告时使用。触发方式包括：「审查这个 Skill」「优化 SKILL.md」「给这个 Skill 做个 TRACE 评测」「测一下这个技能的边界情况」「Skill 提示词冗余检测」「对比优化前后」「帮我看看这个 skill 写得怎么样」等。'
 agent_created: true
 ---
 
@@ -13,51 +13,44 @@ agent_created: true
 
 ## Overview
 
-A meta-skill that treats other skills as the object of analysis — framework-agnostic, applicable to any SKILL.md-based skill (WorkBuddy, OpenClaw, and similar tools). It audits a target
-skill's **logic structure, prompt quality, and execution efficiency**, runs an automated
-**testing** pass (output-accuracy and boundary-case checks), and — based on the audit + test
-results — produces concrete **improvement recommendations** and can **auto-apply** safe
-optimizations. All results are rendered as a **before/after comparison report**.
+这是一个**把其他 Skill 当作分析对象**的元技能——框架无关，适用于任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 及类似工具）。它会审查目标 Skill 的**逻辑结构、提示词质量、执行效率**，运行自动化**测试**（输出准确性与边界用例），并基于审计与测试结果给出具体的**改进建议**，还能**自动应用**安全的优化。所有结果最终渲染为一份**优化前后对比报告**。
 
-The quality bar is the **SkillHub TRACE** evaluation system: five dimensions —
-**T**rust (可信任度), **R**eliability (可靠性), **A**daptability (适用性),
-**C**onvention (规范性), **E**ffectiveness (有效性). See `references/trace-framework.md`.
+质量基准是 **SkillHub TRACE 评测体系**，共五个维度——**T**rust（可信任度）、**R**eliability（可靠性）、**A**daptability（适用性）、**C**onvention（规范性）、**E**ffectiveness（有效性）。详见 `references/trace-framework.md`。
 
-The skill ships with an **extensible audit-rule registry** and **configurable optimization
-strategies** (see `references/audit-rules.md` and `references/optimization-strategies.md`), so
-the rule set and the auto-apply behavior can be tuned without editing code.
+本技能自带**可扩展的审计规则库**和**可配置的优化策略**（见 `references/audit-rules.md` 与 `references/optimization-strategies.md`），因此规则集与自动优化行为可以在不改代码的前提下调整。
 
 > **安全与伦理声明**：全部分析在本地完成，不联网、不上传你的 Skill 内容；自动优化始终保留可逆 diff 与 `.bak` 备份，绝不静默覆盖。仅"模型测试"阶段需你显式提供 `--model-config`，且该步可完全跳过。
 
 ## 触发词速查卡（场景 → 说法 → 执行阶段）
 
-| 场景 | 你可以直接这样说 | 它会执行的阶段 |
-|------|----------------|---------------|
-| 审查 | "审查一下 ~/.workbuddy/skills/foo" / "帮我看看这个 Skill 写得怎么样" / "audit this skill" | Phase 0–1 |
-| 评测 | "给这个 Skill 做个 TRACE 评测" / "评一下质量" / "看看能得几分" | Phase 2 |
-| 测试 | "测一下这个技能的边界情况" / "空输入/大文件会怎样" / "会不会崩" | Phase 3 |
-| 优化（预览） | "把提示词里重复的地方合并一下，先给我看看" / "我想优化但别直接改" | Phase 4 dry-run |
-| 优化（落盘） | "确认优化" / "就按这个改" / "apply" | Phase 4 apply |
-| 报告 | "对比优化前后改了什么" / "给我一份 REPORT.md" | Phase 5 |
-| 自审 / 批量 | "帮我看看这个 skill 有没有隐藏 bug" / "把所有 skills 都审一遍" | 全流程 |
+| 场景 | 你可以直接这样说 | 适用人群 / 行业例子 | 它会执行的阶段 |
+|------|----------------|---------------------|---------------|
+| 审查 | "审查一下 ~/.workbuddy/skills/foo" / "帮我看看这个 Skill 写得怎么样" | 工具型、教学型 Skill 作者（发布前自查） | Phase 0–1 |
+| 评测 | "给这个 Skill 做个 TRACE 评测" / "评一下质量" / "看看能得几分" | 要上架应用市场的作者（品牌/文案/知识型 Skill 也适用） | Phase 2 |
+| 测试 | "测一下这个技能的边界情况" / "空输入/大文件会怎样" / "会不会崩" | 面向真实用户的工具型 Skill（可靠性优先） | Phase 3 |
+| 优化（预览） | "把提示词里重复的地方合并一下，先给我看看" / "我想优化但别直接改" | 任何想改但怕改坏的作者 | Phase 4 dry-run |
+| 优化（落盘） | "确认优化" / "就按这个改" / "apply" | 看过预览、确认无误后 | Phase 4 apply |
+| 报告 | "对比优化前后改了什么" / "给我一份 REPORT.md" | 需要给团队/客户交付审查结论的人 | Phase 5 |
+| 自审 / 批量 | "帮我看看这个 skill 有没有隐藏 bug" / "把所有 skills 都审一遍" | 维护多个 Skill 的团队负责人 | 全流程 |
 
+> **不知道怎么开口？** 从这三个字开始：**「审」**（审查这个 skill）、**「修」**（帮我优化）、**「比」**（对比优化前后）。说完 skill-auditor 会追问路径和细节，你只需要回答。
 > 提示：不需要记特殊命令，用自然语言描述意图即可；skill-auditor 会先澄清模糊点再动手（参见「能力边界与异常处理 → 澄清问卷」）。
 
 ## 目录
 
 - [Overview](#overview)
-- [触发词速查卡](#触发词速查卡场景-说法-执行阶段)
-- [30 秒快速开始](#30-秒快速开始端到端-4-步从-clone-到拿到-reportmd)
-- [When To Use](#when-to-use)
+- [触发词速查卡（场景 → 说法 → 执行阶段）](#触发词速查卡场景-说法-执行阶段)
+- [30 秒快速开始（端到端 4 步：从 clone 到拿到 REPORT.md）](#30-秒快速开始端到端-4-步从-clone-到拿到-reportmd)
+- [什么时候用（When To Use）](#什么时候用when-to-use)
 - [能力边界与异常处理](#能力边界与异常处理)
-- [Design Principles](#design-principles)
-- [Workflow（Phase 0–5）](#workflow)
+- [设计原则（Design Principles）](#设计原则design-principles)
+- [工作流程（Workflow）](#工作流程workflow)
 - [示例（Few-shot）](#示例few-shot)
-- [Configuration](#configuration)
-- [Extensibility](#extensibility)
-- [Output Artifacts](#output-artifacts)
-- [Scripts Reference](#scripts-reference)
-- [References / Assets 引用表](#references-assets-引用)
+- [配置（Configuration）](#配置configuration)
+- [扩展（Extensibility）](#扩展extensibility)
+- [输出产物（Output Artifacts）](#输出产物output-artifacts)
+- [脚本速查（Scripts Reference）](#脚本速查scripts-reference)
+- [References / Assets 引用](#references-assets-引用)
 - [常见问题 FAQ](#常见问题-faq)
 - [反模式](#反模式)
 
@@ -86,15 +79,15 @@ cat .skill-audit/REPORT.md
 
 **稳定性与资源保护**：SKILL.md 超过 512 KB 或正文超过 3 万词 / 3000 句时，语义分析会自动降级为"采样模式"（开头/中间/结尾三段均匀采样），并明确告诉你覆盖了哪些句段；所有错误都会给出明确的"原因 + 下一步操作建议"，不会直接崩溃。
 
-> **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要完整场景案例看 `COOKBOOK.md` → 遇到卡点查 `FAQ.md` → 自定义看 `## Configuration`。
+> **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要完整场景案例看 `COOKBOOK.md` → 遇到卡点查 `FAQ.md` → 自定义看 `## 配置`。
 
-## When To Use
+## 什么时候用（When To Use）
 
-- Review a skill before publishing or after feedback ("帮我看看这个 Skill 写得怎么样").
-- Optimize a SKILL.md that has grown bloated or inconsistent ("把提示词里重复的地方合并一下").
-- Run a TRACE scorecard for a skill library / marketplace submission.
-- Test a skill's robustness ("这个 Skill 在空输入 / 超大输入下会怎样").
-- Produce a diffable before/after report of skill edits ("对比优化前后改了什么").
+- 发布前或收到反馈后，审查一个 Skill（"帮我看看这个 Skill 写得怎么样"）。
+- 优化一个已经臃肿或不一致的 SKILL.md（"把提示词里重复的地方合并一下"）。
+- 为 Skill 库 / 应用市场提交跑一次 TRACE 评分卡。
+- 测试一个 Skill 的健壮性（"这个 Skill 在空输入 / 超大输入下会怎样"）。
+- 生成 Skill 改动的可对比前后报告（"对比优化前后改了什么"）。
 - 对自己的 Skill 做质量自检（用 skill-auditor 审 skill-auditor 自身）。
 
 ## 能力边界与异常处理
@@ -126,73 +119,56 @@ cat .skill-audit/REPORT.md
 3. 只要报告，还是要**自动优化落盘**？
 4. 是否允许 `--aggressive` 高风险改写？
 
-> **接下来读什么**：想了解标准执行流程 → `## Workflow`；想直接看输入输出样例 → `## 示例（Few-shot）`。
+> **接下来读什么**：想了解标准执行流程 → `## 工作流程`；想直接看输入输出样例 → `## 示例（Few-shot）`。
 
-## Design Principles
+## 设计原则（Design Principles）
 
-1. **Audit before change.** Never edit a skill before producing findings; optimizations are
-   derived from evidence, not taste.
-2. **Safe-by-default auto-apply.** `optimize_apply.py` only applies *reversible, low-risk*
-   transformations (dedupe, frontmatter fix, section completion, phrasing normalization) unless
-   the operator passes `--aggressive`. High-risk edits are reported, not applied.
-3. **Deterministic where possible.** Structural, semantic, and TRACE checks run as scripts
-   (stdlib only, no external deps) so results are reproducible and diffable.
-4. **Extensible.** New rules = new entry in a config file; new strategy = new strategy block.
-   No code change required for routine extension.
-5. **Confirm destructive actions, keep a fallback.** Any operation with a side effect
-   (e.g. `--aggressive` rewrites, `--out` writes, or `publish`/外发 steps) must be previewed
-   with `--dry-run` and explicitly confirmed. Safe rewrites always keep a reversible diff so
-   you can fall back on failure (失败可回退); never silently overwrite the user's skill.
+1. **先审计，再改动。** 任何修改都必须在产出发现之后进行；优化源自证据，而非主观偏好。
+2. **默认安全。** `optimize_apply.py` 默认只应用*可逆、低风险*的改写（去重、frontmatter 补全、章节补全、措辞归一），除非显式传入 `--aggressive`。高风险改写只报告、不落盘。
+3. **尽可能确定性。** 结构、语义、TRACE 检查都以脚本运行（仅用标准库，无外部依赖），结果可复现、可对比。
+4. **可扩展。** 新规则 = 配置文件里加一条；新策略 = 加一个策略块。常规扩展无需改代码。
+5. **破坏性操作先确认、留后路。** 任何有副作用的操作（如 `--aggressive` 改写、`--out` 落盘、或发布/外发步骤）都必须先用 `--dry-run` 预览并显式确认。安全改写始终保留可逆 diff，失败可回退；绝不静默覆盖用户的 Skill。
 
-## Workflow
+## 工作流程（Workflow）
 
 ```
-Phase 0  Locate & parse        → resolve target skill dir, read SKILL.md + bundled resources
-Phase 1  Audit                  → structural + prompt-quality + efficiency (audit_skill.py, semantic_analyzer.py)
-Phase 2  TRACE evaluation      → 5-dimension scorecard (trace_eval.py)
-Phase 3  Automated testing     → static integrity + boundary/accuracy test plan (skill_tester.py)
-Phase 4  Recommend + optimize  → build findings, apply safe fixes, emit diff (optimize_apply.py)
-Phase 5  Report                → before/after comparison (assets/report_template.md)
+Phase 0  定位与解析   → 确定目标 Skill 目录，读取 SKILL.md 与附带资源
+Phase 1  审计         → 结构 + 提示词质量 + 效率（audit_skill.py、semantic_analyzer.py）
+Phase 2  TRACE 评测   → 五维评分卡（trace_eval.py）
+Phase 3  自动化测试   → 静态完整性 + 边界/准确性用例（skill_tester.py）
+Phase 4  建议与优化   → 汇总发现、应用安全修复、输出 diff（optimize_apply.py）
+Phase 5  报告         → 优化前后对比（assets/report_template.md）
 ```
 
-Run phases in order. Each phase writes JSON artifacts into `<target>/.skill-audit/` so later
-phases and the final report can consume them.
+按顺序执行各阶段。每个阶段把 JSON 产物写入 `<target>/.skill-audit/`，供后续阶段和最终报告消费。
 
-### Phase 0 — Locate & Parse
+### Phase 0 — 定位与解析
 
-Resolve the target skill directory (the folder containing `SKILL.md`). If the user points at a
-file, use its parent. Record the absolute path; all subsequent commands use it.
+解析出目标 Skill 目录（包含 `SKILL.md` 的那个文件夹）。如果用户指向的是单个文件，则取其父目录。记录完整路径，后续所有命令都基于它。
 
-### Phase 1 — Audit
+### Phase 1 — 审计
 
-Run two analyzers and merge their findings:
+运行两个分析器并合并它们的发现：
 
 ```bash
 python3 <skill_dir>/scripts/audit_skill.py <target> --json > <target>/.skill-audit/audit.json
 python3 <skill_dir>/scripts/semantic_analyzer.py <target>/SKILL.md --json > <target>/.skill-audit/semantic.json
 ```
 
-- `audit_skill.py` covers **structure** (frontmatter validity, required fields, resource
-  references resolve, naming conventions), **prompt quality** (trigger clarity, instruction
-  form, example coverage, length hygiene), and **efficiency** (duplicated blocks, oversized
-  inline content that should be a reference, dead references).
-- `semantic_analyzer.py` covers **prompt semantics**: near-duplicate sentences, repeated
-  phrases, terminology inconsistency (same concept, different words), and conflicting
-  instructions. See `references/prompt-semantic-analysis.md`.
+- `audit_skill.py` 覆盖**结构**（frontmatter 合法性、必填字段、资源引用能否解析、命名规范）、**提示词质量**（触发词清晰度、指令形式、示例覆盖、长度卫生）、**效率**（重复块、应外置的超长内联内容、死引用）。
+- `semantic_analyzer.py` 覆盖**提示词语义**：近义重复句、高频重复短语、术语不一致（同一概念不同写法）、冲突指令。详见 `references/prompt-semantic-analysis.md`。
 
-Merge rule: union findings; de-duplicate by `(rule_id, location)`.
+合并规则：并集合并；按 `(rule_id, location)` 去重。
 
-### Phase 2 — TRACE Evaluation
+### Phase 2 — TRACE 评测
 
 ```bash
 python3 <skill_dir>/scripts/trace_eval.py <target> --json > <target>/.skill-audit/trace.json
 ```
 
-Produces a 0–100 score per dimension plus a weighted overall, with the evidence behind each
-score. Methodology and weights live in `references/trace-framework.md`. Use the scores to
-prioritize which findings to fix first (lowest dimension = highest leverage).
+每个维度产出 0–100 分加一个加权总分，每项分数都附证据。方法与权重在 `references/trace-framework.md`。用分数决定先修哪些发现（最低维度 = 最高杠杆）。
 
-### Phase 3 — Automated Testing
+### Phase 3 — 自动化测试
 
 ```bash
 # 静态完整性检查（引用是否存在 / frontmatter / 代码围栏 / 锚点）
@@ -201,74 +177,65 @@ python3 <skill_dir>/scripts/skill_tester.py <target> --run > <target>/.skill-aud
 python3 <skill_dir>/scripts/skill_tester.py <target> --plan-only > <target>/.skill-audit/testplan.json
 ```
 
-`skill_tester.py` runs two layers:
+`skill_tester.py` 分两层：
 
-1. **Static integrity tests (fully automated, high value):** every `scripts/`, `references/`,
-   `assets/` path referenced in SKILL.md actually exists; examples are internally consistent;
-   no broken internal anchors; frontmatter parses. These run by default and with `--run`.
-2. **Test-plan generation:** derives boundary cases (empty input, oversized skill, missing
-   optional args, ambiguous intent) and accuracy cases (does the skill do what its description
-   claims?) from the skill's own description and examples. Always generated.
+1. **静态完整性测试（全自动、高价值）**：SKILL.md 中引用的每个 `scripts/`、`references/`、`assets/` 路径真实存在；示例内部一致；内部锚点无死链；frontmatter 可解析。默认与 `--run` 都会执行。
+2. **测试用例生成**：从技能自身的描述与示例推导边界用例（空输入、超大 Skill、缺失可选参数、歧义意图）和准确性用例（技能是否真的做了 description 声称的事）。始终生成。
 
 > **`--run` vs `--plan-only`**：`--run`（或默认无 flag）**执行**静态完整性检查并输出结果；
 > `--plan-only` **只生成**边界/准确性用例，跳过静态检查。两者行为不同，请按需选用。
 
-To actually execute the boundary/accuracy plan against a model, pass `--model-config config.json`
-along with `--run` (or default); otherwise the plan is emitted with `manual` status for an agent
-to execute (see Phase 3 execution note below). Boundary/accuracy results are recorded in
-`testplan.json` as `pass | fail | manual`.
+把边界/准确性用例交给真实模型执行时，传入 `--model-config config.json` 配合 `--run`（或默认）；
+否则用例以 `manual`（待人工执行）状态输出，供 agent 按下面的"Phase 3 执行说明"处理。
+边界/准确性结果在 `testplan.json` 中记录为 `pass | fail | manual`。
 
-> **Phase 3 execution note:** True output testing requires loading the target skill into a
-> model session and running each case. When a case is `manual`, the agent should: read
-> `testplan.json`, execute the `manual` cases by invoking the target skill in a sandbox (or
-> reasoning over its instructions), and write `pass/fail` + evidence back, then re-run
-> `skill_tester.py --merge-results` to fold results into the report.
+> **Phase 3 执行说明**：真正的输出测试需要把目标 Skill 载入一个模型会话并逐个跑用例。
+> 当某个用例状态是 `manual` 时，agent 应该：读取 `testplan.json`，在沙箱中调用目标 Skill
+> 执行 `manual` 用例（或对其指令进行推理），把 `pass/fail` 和证据写回，然后重跑
+> `skill_tester.py --merge-results` 把结果并入报告。
 
-### Phase 4 — Recommend & Auto-Apply
+### Phase 4 — 建议与自动优化
 
-Compile findings from Phases 1–3 into a single `findings.json`, then optimize:
+把 Phase 1–3 的发现汇总成单个 `findings.json`，再做优化：
 
 ```bash
-# dry-run first (shows what would change, no writes)
+# 先 dry-run 预览（显示会改什么，不写盘）
 python3 <skill_dir>/scripts/optimize_apply.py <target> \
     --findings <target>/.skill-audit/findings.json --dry-run
 
-# apply safe optimizations + write diff + before/after report
+# 应用安全优化 + 写 diff + 前后对比报告
 python3 <skill_dir>/scripts/optimize_apply.py <target> \
     --findings <target>/.skill-audit/findings.json \
     --out <target>/.skill-audit/optimization-report.md
 ```
 
-`optimize_apply.py` maps each finding to a strategy (see `references/optimization-strategies.md`)
-and applies only **reversible** transformations by default. It writes a unified diff and a
-human-readable before/after report. To also apply higher-risk rewrites, pass `--aggressive`
-(and review the diff before committing).
+`optimize_apply.py` 把每条发现映射到一个策略（见 `references/optimization-strategies.md`），
+默认只应用**可逆**改写。它写出一份统一 diff 和一份可读的前后对比报告。要应用更高风险的改写，
+请传 `--aggressive`（提交前务必先看 diff）。
 
-If the user only wants recommendations (no edits), stop after the dry-run and present the
-findings + TRACE scores directly.
+如果用户只想要建议（不改动），在 dry-run 后停下，直接呈现发现 + TRACE 分数即可。
 
-### Phase 5 — Report
+### Phase 5 — 报告
 
-Assemble the final deliverable from `assets/report_template.md` (a small `{{placeholder}}`
-/ `{% for %}` template) using the artifacts collected in Phases 1–4:
+用 Phase 1–4 收集的产物，通过 `assets/report_template.md`（一个小的 `{{placeholder}}` / `{% for %}` 模板）组装最终交付物：
 
 ```bash
 python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit/REPORT.md
 ```
 
-`build_report.py` reads `audit.json` / `semantic.json` / `trace.json` / `testplan.json` plus the
-optional `optimization-report.md`, renders the template, and writes `REPORT.md`. The report contains:
+`build_report.py` 读取 `audit.json` / `semantic.json` / `trace.json` / `testplan.json` 以及
+可选的 `optimization-report.md`，渲染模板，写出 `REPORT.md`。报告包含：
 
-- Skill identity (name, path, scope).
-- TRACE scorecard table (5 dimensions + overall, with prior-vs-after if available).
-- Top findings by severity, each with rule_id, location, evidence, recommendation.
-- Testing summary (static pass rate + manual-case outcomes).
-- Before/after diff excerpt for applied optimizations.
-- Configurable next-step suggestions.
+- Skill 身份（名称、路径、作用域）。
+- TRACE 评分卡表格（5 个维度 + 总分，有历史分数时带前后对比）。
+- 按严重度排序的 Top 发现，每条含 rule_id、位置、证据、建议。
+- 测试小结（静态通过率 + manual 用例结论）。
+- 已应用优化的前后 diff 摘录。
+- 可配置的下一步建议。
 
-Write the report to `<target>/.skill-audit/REPORT.md` and present it.
+把报告写到 `<target>/.skill-audit/REPORT.md` 并呈现给用户。
 
-> **接下来读什么**：想照着实例跑一遍 → `## 示例（Few-shot）`；想自己配置规则/权重 → `## Configuration`。
+> **接下来读什么**：想照着实例跑一遍 → `## 示例（Few-shot）`；想自己配置规则/权重 → `## 配置`。
 
 ## 示例（Few-shot）
 
@@ -315,60 +282,55 @@ Write the report to `<target>/.skill-audit/REPORT.md` and present it.
   python3 scripts/build_report.py .   # 一行命令拿到自审报告
   ```
 
-## Configuration
+## 配置（Configuration）
 
-All extensibility lives in a JSON config (copy `assets/config.example.json` to
-`<target>/.skill-audit/config.json` and edit):
+所有可扩展配置都在一个 JSON 文件里（把 `assets/config.example.json` 复制到
+`<target>/.skill-audit/config.json` 再编辑）：
 
-- `rules`: enable/disable audit rules by `rule_id`, set per-rule severity thresholds.
-- `weights`: override TRACE dimension weights (must sum to 1.0).
-- `strategies`: toggle which optimization strategies run, and whether `--aggressive` is allowed.
-- `thresholds`: length/duplication/consistency numeric cutoffs.
+- `rules`：按 `rule_id` 启用/禁用审计规则，设置每条规则的严重度阈值。
+- `weights`：覆盖 TRACE 各维度权重（必须归一化到 1.0）。
+- `strategies`：开关优化策略，以及是否允许 `--aggressive`。
+- `thresholds`：长度 / 重复 / 一致性的数值阈值。
 
-Pass `--config <path>` to any script that supports it (`audit_skill.py`, `trace_eval.py`,
-`optimize_apply.py`).
+对支持配置的脚本传 `--config <path>`（`audit_skill.py`、`trace_eval.py`、`optimize_apply.py`）。
 
-> **接下来读什么**：想扩展自定义规则 → `## Extensibility`；遇到具体问题 → `## 常见问题 FAQ` 或独立 `FAQ.md`。
+> **接下来读什么**：想扩展自定义规则 → `## 扩展`；遇到具体问题 → `## 常见问题 FAQ` 或独立 `FAQ.md`。
 
-## Extensibility
+## 扩展（Extensibility）
 
-- **Add an audit rule:** append an entry to `config.rules` with a new `rule_id` and point the
-  script at a custom check module via `config.custom_rules_module` (a Python file exporting
-  `def check(skill, ctx) -> list[Finding]`). `audit_skill.py` imports and runs it.
-- **Add an optimization strategy:** add a `strategy_id` block to `config.strategies` and a
-  corresponding transform in a custom module referenced by `config.custom_strategies_module`
-  (exports `def transform(skill, finding, ctx) -> (new_text, change_note)`).
-- **Custom TRACE weights / rubric:** edit `config.weights` and `config.trace_rubric`.
+- **新增审计规则：** 在 `config.rules` 里加一个带新 `rule_id` 的条目，并通过 `config.custom_rules_module` 指向一个自定义检查模块（一个 Python 文件，导出 `def check(skill, ctx) -> list[Finding]`）。`audit_skill.py` 会导入并运行它。
+- **新增优化策略：** 在 `config.strategies` 里加一个 `strategy_id` 块，并在 `config.custom_strategies_module` 引用的自定义模块中写对应 transform（导出 `def transform(skill, finding, ctx) -> (new_text, change_note)`）。
+- **自定义 TRACE 权重 / 细则：** 编辑 `config.weights` 与 `config.trace_rubric`。
 
-## Output Artifacts
+## 输出产物（Output Artifacts）
 
-All intermediate artifacts land in `<target>/.skill-audit/`:
+所有中间产物都落在 `<target>/.skill-audit/`：
 
 ```
 .skill-audit/
-  config.json          # active configuration
-  audit.json           # Phase 1 structural/prompt/efficiency findings
-  semantic.json        # Phase 1 semantic findings
-  trace.json           # Phase 2 TRACE scorecard
-  testplan.json        # Phase 3 test plan + results
-  findings.json        # merged findings (Phase 4 input)
-  optimization-report.md  # Phase 4 before/after + diff
-  REPORT.md            # Phase 5 final deliverable
+  config.json          # 生效配置
+  audit.json           # Phase 1 结构/提示词/效率发现
+  semantic.json        # Phase 1 语义发现
+  trace.json           # Phase 2 TRACE 评分卡
+  testplan.json        # Phase 3 测试用例 + 结果
+  findings.json        # 合并发现（Phase 4 输入）
+  optimization-report.md  # Phase 4 前后对比 + diff
+  REPORT.md            # Phase 5 最终交付物
 ```
 
-## Scripts Reference
+## 脚本速查（Scripts Reference）
 
-| Script | Purpose | Key flags |
-|--------|---------|-----------|
-| `audit_skill.py` | Structure / prompt-quality / efficiency audit | `--json`, `--config` |
-| `semantic_analyzer.py` | Redundancy, terminology, conflict detection | `--json`, `--min-sentence-len` |
-| `trace_eval.py` | TRACE 5-dimension scoring | `--json`, `--config`, `--prior trace.json` |
-| `skill_tester.py` | Static integrity + test-plan generation | `--plan-only`, `--run`, `--model-config`, `--merge-results` |
-| `optimize_apply.py` | Apply safe optimizations + diff + report | `--dry-run`, `--aggressive`, `--out`, `--config` |
-| `build_report.py` | Assemble Phase 5 REPORT.md from artifacts | `--out`, `--config` |
+| 脚本 | 用途 | 关键参数 |
+|------|------|----------|
+| `audit_skill.py` | 结构 / 提示词质量 / 效率审计 | `--json`, `--config` |
+| `semantic_analyzer.py` | 冗余、术语、冲突检测 | `--json`, `--min-sentence-len` |
+| `trace_eval.py` | TRACE 五维评分 | `--json`, `--config`, `--prior trace.json` |
+| `skill_tester.py` | 静态完整性 + 用例生成 + 启发式判定 | `--plan-only`, `--run`, `--no-model`, `--model-config`, `--merge-results` |
+| `optimize_apply.py` | 安全优化 + diff + 报告 | `--dry-run`, `--aggressive`, `--out`, `--config` |
+| `build_report.py` | 从产物汇编 Phase 5 的 REPORT.md | `--out`, `--config` |
+| `diagnose.py` | 一键环境与 Skill 健康诊断 | （可带目标路径，`--json`） |
 
-All scripts are Python 3.9+ stdlib-only. No network or external packages required for
-audit / semantic / TRACE / static-test phases.
+所有脚本都是 Python 3.9+ 标准库实现。审计 / 语义 / TRACE / 静态测试阶段无需网络或外部依赖。
 
 ## References / Assets 引用
 
@@ -452,17 +414,17 @@ A：`CHANGELOG.md` 记录每次发布的功能改动、bug 修复与已知局限
 
 ## 反模式
 
-下表是评审中最常见的 10 类问题——左边是典型错误写法，右边是修复方向。详细对比示例见 `FAQ.md` Q14。
+下表是评审中最常见的 10 类问题，每类给出**典型错误示例**、**为什么扣分**、**修复方向**与**真实修复案例**。详细对照见 `FAQ.md` Q14。
 
-| # | 反模式 | 为什么扣分 | 修复方向 |
-|---|--------|-----------|----------|
-| 1 | description 只写"这是一个 XX 工具"，没讲何时用 | C / E 低 | 加入 WHEN 触发场景 + 典型用户说法 |
-| 2 | 触发词只堆关键词 | A 低 | 改成场景→说法→执行阶段映射表 |
-| 3 | 边界处理只有口号 | R 低 | 列空输入/超大/缺失的具体应对话术 |
-| 4 | 示例不可执行 | R / C 低 | 用可复制的 `\`\`\`bash` 代码块 |
-| 5 | 错误提示只有代码 | R 低 | 用"原因 + 下一步"人话话术 |
-| 6 | 文档全是命令行，无自然语言示例 | A / C 低 | 加对话式使用场景速查 |
-| 7 | 所有细节堆在 SKILL.md 正文 | C 低 | 外置到 `references/`，正文只留流程 |
-| 8 | 含"100% 准确""永远不会错" | T 低 | 改成可验证表述 |
-| 9 | 命令参数与脚本实际声明不一致 | R / C 低 | 保持文档与代码一致（参考 STRUCT-013） |
-| 10 | 优化时无备份、无 diff、无回退 | T / R 低 | 默认 dry-run + `.bak` 备份 + 统一 diff |
+| # | 反模式 | 典型错误示例 | 为什么扣分 | 修复方向 | 真实修复案例 |
+|---|--------|-------------|-----------|----------|-------------|
+| 1 | description 没讲何时用 | "这是一个审查工具。" | C/E 低：评测者不知道什么时候该触发它 | 加 WHEN 触发场景 + 典型用户说法 | "当需要审查/评测/优化基于 SKILL.md 的 Skill 时使用" |
+| 2 | 触发词只堆关键词 | "触发词：审查、评测、优化" | A 低：关键词堆叠不等于"一句话就能唤起" | 改成场景→说法→执行阶段映射表 | 本 Skill 的「触发词速查卡」（7 大场景 + 人话说法） |
+| 3 | 边界处理只有口号 | "本技能能处理各种边界情况。" | R 低：无具体话术，等于没写 | 列空输入/超大/缺失的具体应对话术 | "能力边界与异常处理"三栏表 + 诊断→修复话术库 |
+| 4 | 示例不可执行 | "运行脚本即可。" | R/C 低：示例无命令、无路径、无预期产出 | 用可复制的 ```bash 代码块 | 本 Skill 的 30 秒快速开始（cd → build_report.py → cat） |
+| 5 | 错误提示只有代码 | "E_TOO_LARGE" | R 低：非技术用户看不懂，也无下一步 | 用"原因 + 下一步"人话话术 | 本 Skill 的错误提示已升级为"原因 + 一键命令" |
+| 6 | 文档全是命令行 | 全文只有 ```bash 代码块 | A/C 低：普通用户没有命令行习惯 | 加对话式使用场景速查 | COOKBOOK「自然语言使用速查」表 |
+| 7 | 所有细节堆在正文 | SKILL.md 3000 行，references/ 为空 | C 低：渐进式披露失败，正文淹没读者 | 外置到 references/，正文只留流程 | 本 Skill 的 7 个脚本细节全部在 scripts/，正文只留用法 |
+| 8 | 含"100% 准确""永远不会错" | "保证 100% 正确" | T 低：绝对化承诺不可验证 | 改成可验证表述 | "同类技能中重复率 < 1%"这种可测量说法 |
+| 9 | 命令与脚本声明不一致 | 文档写 `--rules-only`，脚本没这参数 | R/C 低：照文档跑必报错 | 保持文档与代码一致（参考 STRUCT-013） | skill-auditor 曾自查出此类问题并修复 |
+| 10 | 优化无备份无回退 | 直接覆盖原文件 | T/R 低：改坏了无法恢复 | 默认 dry-run + `.bak` 备份 + 统一 diff | 本 Skill 的优化流程：dry-run → 确认 → .bak + diff |

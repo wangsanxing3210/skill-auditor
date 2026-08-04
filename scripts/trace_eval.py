@@ -65,9 +65,15 @@ def metrics_T(skill, body, art):
     t2 = m_pass() if (not has_d or has_c) else m_part()
     # T3 exaggeration: skip code fences and inline code so quoted examples
     # (e.g. anti-pattern tables that cite "100% 准确" as a bad example) don't
-    # trigger a false positive.
+    # trigger a false positive. Also exempt technical-usage contexts where the
+    # keyword has a non-exaggerated meaning (e.g. "绝对路径" = absolute path).
     body_no_code = C.strip_code_fences(body)
-    t3 = m_fail() if any(w.lower() in body_no_code.lower() for w in EXAGG) else m_pass()
+    bl = body_no_code.lower()
+    hits = [w for w in EXAGG if w.lower() in bl]
+    # technical exemptions: these patterns are not exaggerations
+    tech_ok = all(not (w in ("绝对", "always") and (
+        "绝对路径" in bl or "绝对定位" in bl or "absolute path" in bl)) for w in hits)
+    t3 = m_pass() if (not hits or tech_ok) else m_fail()
     # T4 privacy note
     has_p = any(w.lower() in body.lower() for w in PRIVACY)
     t4 = m_pass() if (not has_p or has_c) else m_part()

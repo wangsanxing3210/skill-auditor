@@ -39,8 +39,9 @@
 ## 4. 测试结论
 
 - 静态完整性：{{static_pass}}/{{static_total}} 通过
-- 用例：{{cases_total}} 项（已执行 {{cases_executed}}，待人工 {{cases_manual}}）
+- 用例：{{cases_total}} 项（已执行 {{cases_executed}}，待人工 {{cases_manual}}，启发式判定 {{cases_heuristic}}）
 - 边界/准确性摘要：{{test_summary}}
+- **扫描覆盖度**：{{coverage}}
 
 ## 5. 优化前后对照
 

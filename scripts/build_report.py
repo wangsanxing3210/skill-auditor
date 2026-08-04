@@ -171,6 +171,7 @@ def main():
 
         # test summary
         static_pass = static_total = cases_total = cases_executed = cases_manual = 0
+        cases_heuristic = 0
         test_summary = "（未运行测试阶段）"
         if testplan:
             s = testplan.get("summary", {})
@@ -179,10 +180,25 @@ def main():
             cases_total = s.get("cases_total", 0)
             cases_executed = s.get("cases_executed", 0)
             cases_manual = s.get("cases_manual", 0)
+            cases_heuristic = s.get("cases_heuristic", 0)
+            eval_mode = testplan.get("eval_mode", "manual")
             if cases_manual:
                 test_summary = "仍有 %d 条用例待人工/模型执行（边界与准确性需实跑）" % cases_manual
+            elif eval_mode == "heuristic":
+                test_summary = ("全部 %d 条用例已由零依赖启发式规则自动判定（含 %d 条静态检查）；"
+                                "如需真实模型输出测试，可用 --model-config 升级" % (cases_executed, static_pass))
             else:
                 test_summary = "全部用例已执行"
+
+        # coverage: extract SEM-INFO sampling note from semantic.json (if any)
+        coverage = "全文已扫描（无需采样）"
+        if semantic:
+            for f in semantic.get("semantic_findings", []):
+                if f.get("rule_id") == "SEM-INFO":
+                    ev = f.get("evidence", "")
+                    if "分段采样" in ev:
+                        coverage = ev.split("，已启用")[-1] if "已启用" in ev else ev
+                    break
 
         applied, report_only, change_notes, diff_excerpt = _parse_opt_report(opt_path)
 
@@ -214,7 +230,9 @@ def main():
             "cases_total": cases_total,
             "cases_executed": cases_executed,
             "cases_manual": cases_manual,
+            "cases_heuristic": cases_heuristic,
             "test_summary": test_summary,
+            "coverage": coverage,
             "applied_strategies": applied,
             "report_only_strategies": report_only,
             "change_notes": change_notes,

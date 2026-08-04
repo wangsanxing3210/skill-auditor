@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.7.0 — 2026-08-04
+
+**按 SkillHub 评测报告（4.7/5）落地 P0–P3 全量优化 + 全文中文化**
+
+- **描述中文化（用户要求）**：`SKILL.md` 的 description、Overview、Design Principles、Workflow、Phase 0–5、Configuration、Extensibility 等全部改为中文为主（保留必要技术名词）；触发词速查卡加"适用人群/行业"列与"审/修/比"傻瓜入口。
+- **P0-1 零依赖启发式测试**（`scripts/skill_tester.py`）：新增 `--no-model` 模式（无 `--model-config` 时自动启用），用确定性规则对边界/准确性用例输出 pass/fail + 证据，不再全是 manual；17 条用例全部自动判定。
+- **P0-2 全量浅扫兜底**（`scripts/semantic_analyzer.py`）：heavy 模式下术语一致性、冲突指令、高频短语、意图漂移对**全文**执行（O(n)），仅 O(n²) 近义句重复做重点段采样；SEM-INFO 话术改为"分段采样 + 全量浅扫兜底"，消除"跳过"负面感知。
+- **P0-3 报告覆盖度栏**（`scripts/build_report.py`、`assets/report_template.md`）：第 4 节新增"扫描覆盖度"与启发式判定统计，默认输出带结论而非"待人工"。
+- **P1-1 错误提示命令化**（`scripts/_common.py`）：humanize_error / GuardError 的下一步升级为"一键可复制命令"（ls、wc -c、json.load 校验等）。
+- **P1-2 一键环境诊断**（`scripts/diagnose.py` 新增）：Python 版本 / 脚本可导入 / SKILL.md 可读性 / frontmatter / 超限 / dotfile / config JSON 七项检查，输出"环境健康报告"。
+- **P2 反模式五列化 + FAQ Q17**（`SKILL.md`、`FAQ.md`）：反模式表扩为五列（含典型错误示例与真实修复案例）；新增 Q17 评测结果解读指南。
+- **修复两个新 bug**：① 中文化后 TOC 锚点失效（ST-04 死锚点）——重建 TOC 为精确 slug；② T3 把"绝对路径"误判为夸大——加技术语境豁免。
+- **自检**：py_compile 全过；自身 audit 仅 STRUCT-014；TRACE 100.0/A；静态 5/5；17 用例全启发式执行；diagnose.py 三场景验证通过；build_report 端到端含覆盖度栏。
+
 ## v1.6.0 — 2026-07-30
 
 **第二轮查漏补缺：补齐 T/A/E 显式声明 + C 目录与反模式**

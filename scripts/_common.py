@@ -41,6 +41,7 @@ def humanize_error(exc, tool_name="skill-auditor"):
 
     The returned message is aimed at end users who may not be technical. The
     optional internal error code is still returned but not embedded in the text.
+    `next_step` includes copy-pasteable shell commands where relevant.
     """
     if isinstance(exc, GuardError):
         # GuardError already carries user-friendly wording; just keep it.
@@ -49,19 +50,20 @@ def humanize_error(exc, tool_name="skill-auditor"):
         return (
             "E_NOT_FOUND",
             "没找着目标 Skill。你指定的路径里似乎没有 SKILL.md。",
-            "请检查一下路径：如果是目录，确保里面包含 SKILL.md；也可以直接拖进 SKILL.md 的完整路径。",
+            "先确认一下：ls -la <你的路径> 看看目录里有什么；如果是目录，里面必须有 SKILL.md 才能审。",
         )
     if isinstance(exc, PermissionError):
         return (
             "E_PERMISSION",
             "当前账号没法读/写这个路径，通常是权限不够。",
-            "换个有权限的目录，或者在命令行用 ls -la 看看当前用户是否有读写权限。",
+            "用 ls -ld <路径> 看属主和权限；没有权限就换个目录，或用 sudo 授权（慎用）。",
         )
     if isinstance(exc, json.JSONDecodeError):
         return (
             "E_BAD_JSON",
             "配置文件格式不对，JSON 在第 %s 行附近解析失败了。" % exc.lineno,
-            "常见原因是多了/少了逗号、引号没成对。可以用任意 JSON 校验器（如 json.cn）粘贴检查。",
+            "快速自检：python3 -c 'import json; json.load(open(\"config.json\"))' —— 若报错会指出具体行；"
+            "常见原因是逗号/引号不成对，修好后再跑。",
         )
     if isinstance(exc, UnicodeDecodeError):
         return (
@@ -73,7 +75,7 @@ def humanize_error(exc, tool_name="skill-auditor"):
         return (
             "E_MEMORY",
             "内存不够用了，文件太大导致处理到一半卡住。",
-            "先关掉其他占用内存的程序；或者把 SKILL.md 拆成多个 references/ 文件，只留核心内容在正文。",
+            "先关掉其他占用内存的程序；或把 SKILL.md 拆成多个 references/ 文件，只留核心内容在正文。",
         )
     return (
         "E_UNEXPECTED",
@@ -93,7 +95,8 @@ def safe_read_text(path, label="文件"):
         raise GuardError(
             "E_TOO_LARGE",
             "%s 有点大（%.1f KB），超过了当前 %.1f KB 的处理限制。" % (label, size / 1024, MAX_SKILL_BYTES / 1024),
-            "① 精简 SKILL.md 正文，把细节移到 references/；② 或在 config.json 中提高阈值（advanced）。"
+            "先看实际大小：wc -c %s ；然后① 精简 SKILL.md 正文，把细节移到 references/；② 或在 config.json 中提高阈值（advanced）。"
+            % os.path.basename(path)
         )
     try:
         with open(path, "r", encoding="utf-8") as f:

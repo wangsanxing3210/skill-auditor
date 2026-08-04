@@ -251,29 +251,29 @@ def main():
 
         raw = C.safe_read_text(args.skill_md, label="SKILL.md")
         _, body, _ = C.parse_frontmatter(raw)
-        heavy = C.body_too_heavy(body)
-
-        sents = split_sentences(body)
-        # Guard against many-short-sentence files too.
-        if len(sents) > C.MAX_SENTENCES_BEFORE_HEAVY:
-            heavy = True
+        sents_full = split_sentences(body)
+        heavy = C.body_too_heavy(body) or len(sents_full) > C.MAX_SENTENCES_BEFORE_HEAVY
         findings = []
         if heavy:
-            sents, dup_ranges = sample_sentences_for_heavy(sents, budget=C.MAX_SENTENCES)
+            sents_sampled, dup_ranges = sample_sentences_for_heavy(sents_full, budget=C.MAX_SENTENCES)
             sampled_blocks = ["第 %d–%d 句" % (start + 1, end) for start, end in dup_ranges]
             reason = "正文超过 %d 词" % C.MAX_BODY_WORDS_FOR_HEAVY if C.body_too_heavy(body) else "句子数超过 %d" % C.MAX_SENTENCES_BEFORE_HEAVY
             findings.append(C.make_finding(
                 "SEM-INFO", "low", "semantic", "SKILL.md",
-                "%s，已启用大文件采样模式（覆盖 %s；未覆盖部分请自行检查）" % (
+                "%s，已启用分段采样：近义句重复（O(n²)）只在重点段 %s 深度检查；"
+                "术语一致性、冲突指令、高频短语、意图漂移已对全文做全量浅扫兜底。" % (
                     reason, "、".join(sampled_blocks)),
-                "如需完整分析，请拆分正文到 references/ 或减少字数"))
-        findings += near_dup_sentences(sents, dup_j, minlen, heavy=heavy)[0]
-        if not heavy:
-            findings += repeated_phrases(body, rep_min)
+                "如需 100% 深扫（含近义句两两比较），请拆分正文到 references/ 或减少字数"))
+        else:
+            sents_sampled = sents_full
+        # O(n²) 近义句重复：heavy 时仅采样段；否则全量
+        findings += near_dup_sentences(sents_sampled, dup_j, minlen, heavy=heavy)[0]
+        # O(n) 全量检查：heavy 与正常模式下都对全文执行（全量浅扫兜底）
+        findings += repeated_phrases(body, rep_min)
         clusters = cfg.get("term_clusters", DEFAULT_CLUSTERS)
         term_f, suggestions = term_consistency(body, clusters)
         findings += term_f
-        findings += conflict_instructions(sents[:C.MAX_SENTENCES] if heavy else sents)
+        findings += conflict_instructions(sents_full)
         findings += intent_drift(body, drift)
     except Exception as e:
         code, message, next_step = C.humanize_error(e, "semantic_analyzer")
