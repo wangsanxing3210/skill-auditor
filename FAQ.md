@@ -88,15 +88,14 @@ skill-auditor 默认只应用低风险、可逆的改写（去重、frontmatter 
 
 ## Q7：能给 skill-auditor 自己做自检吗？
 
-可以。对 skill-auditor 自身跑一遍 Phase 0–5 就是一次完整自检：
+可以。对 skill-auditor 自身跑一遍全流程就是一次完整自检，一条命令搞定：
 
 ```bash
-python3 scripts/audit_skill.py . --json
-python3 scripts/trace_eval.py . --json
-python3 scripts/skill_tester.py . --run
+cd ~/.workbuddy/skills/skill-auditor
+python3 scripts/run_all.py .          # 自动跑 审计→语义→TRACE→测试→报告
 ```
 
-本仓库 `.skill-audit/REPORT.md` 是一次自检实例（由 `build_report.py` 生成）。
+本仓库 `.skill-audit/REPORT.md` 是一次自检实例（由 `run_all.py` 生成）。
 
 ---
 
@@ -123,8 +122,8 @@ skill-auditor 把所有常见失败映射成带解释的代码，避免抛出原
 有三层保护：
 
 1. **文件大小限制**：SKILL.md 超过 512 KB 时直接给出友好提示，不会硬读；
-2. **词数/句数阈值**：正文超过 3 万词，或句子数超过 3000 句时，自动启用采样模式；
-3. **三段均匀采样**：语义分析从**开头、中间、结尾**各取约 500 句（共 1500 句），而不是只看前 1500 句，并明确告诉你覆盖了哪些句段、哪些未覆盖。
+2. **词数/句数阈值**：正文超过 3 万词，或句子数超过 3000 句时，自动启用"重点段深扫 + 全文浅扫兜底"；
+3. **不丢检查项**：术语、冲突、短语、意图漂移对全文执行；仅近义句重复（O(n²)）在开头/中间/结尾重点段深扫（各约 500 句，共 1500 句），覆盖区间会写入报告。
 
 如果你的 Skill 确实需要很长，建议把大段细节外置到 `references/`，SKILL.md 只保留流程和入口。
 
@@ -224,7 +223,7 @@ SkillHub TRACE 报告给出五个维度（T/R/A/C/E）各 0–5 分。**不要�
 | 子项写"需额外配置才能测到" | 评测者认为核心功能缺默认路径 | 提供零依赖兜底（如 skill-auditor 的启发式测试模式） |
 | 子项写"会跳过部分内容" | 采样被感知为功能缺失 | 明确写出"全量浅扫兜底 + 重点段深扫"的覆盖范围 |
 
-**最快验证法**：改完一处后重跑 `python3 scripts/build_report.py .`，看该维度的证据行是否变化——分数是结果，证据才是该改的东西。
+**最快验证法**：改完一处后重跑 `python3 scripts/run_all.py .`，看该维度的证据行是否变化——分数是结果，证据才是该改的东西。
 
 ---
 

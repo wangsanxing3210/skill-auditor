@@ -22,7 +22,7 @@ unified diff 供人工复核。
 | OPT-PHRASE-NORMALIZE | PROMPT-006 | safe | 弱化绝对化表述 | 已实现 |
 | OPT-REWRITE-CONFLICT | SEM-004 | aggressive | 重写冲突指令，保留更安全/更合理的版本 | 已实现（仅建议） |
 | OPT-RESTRUCTURE | PROMPT-004, EFF-005 | aggressive | 将超长 SKILL.md 拆段外置到 references/ | 已实现（仅建议） |
-| OPT-TRIGGER | PROMPT-001/005 | safe | **（预留，尚未实现）** 把 [TODO]、缺失的触发词补全为占位模板 |
+| OPT-TRIGGER | PROMPT-001 | safe | 为缺触发词的 Skill 自动补全「触发词速查卡」（基于 description + 能力描述生成草案） | 已实现（v1.5.0） |
 | OPT-EXAMPLE-ADD | PROMPT-003/007 | aggressive | **（预留，尚未实现）** 为缺失示例/交付物补写示例段落 |
 
 ## 安全约束（OPT-TERM-UNIFY 必读）

@@ -162,5 +162,42 @@ cp SKILL.md.bak SKILL.md
 
 - **只想知道能不能改**：先跑 `--dry-run`，零风险。
 - **某个规则总误报**：在 `config.json` 里把该 `rule_id` 的 `enabled` 设成 `false`。
-- **要审多个 Skill**：写个 shell for 循环，批量跑 `audit_skill.py` 和 `trace_eval.py`。
+- **要审多个 Skill**：写个 shell for 循环，批量跑 `run_all.py` 逐个生成报告。
 - **要归档报告**：把 `.skill-audit/` 目录一起提交到版本控制，方便追踪质量变化。
+- **新手最省事**：直接 `python3 <skill-auditor>/scripts/run_all.py <目标Skill>`，一条命令出报告。
+
+---
+
+## 最佳实践
+
+### 发布前自检清单（5 步，5 分钟）
+
+```bash
+cd ~/.workbuddy/skills/skill-auditor
+python3 scripts/run_all.py ~/.workbuddy/skills/你的Skill   # ① 全流程报告
+python3 scripts/diagnose.py ~/.workbuddy/skills/你的Skill  # ② 环境/文件健康
+```
+
+1. **看 TRACE 总分与最弱维度**——总分 ≥90（A）才建议上架；最弱维度就是优化优先级。
+2. **看 high 级发现**——报告第 3 节里 high 级必须先清零（缺失脚本、死引用、冲突指令）。
+3. **检查 description 是否写了"何时用"**——用一句话回答"什么时候该触发它"，这是 C/E 两维的命门。
+4. **确认离线可用**——references/、assets/ 全部自带，无外部链接依赖。
+5. **跑一次 `--dry-run` 优化预览**——只读查看建议，确认无误再决定是否落盘。
+
+### TRACE 各维度保分要点
+
+| 维度 | 保分要点 | 常见扣分原因 |
+|------|----------|-------------|
+| T | 无硬编码密钥；无绝对化表述；有隐私/本地声明；引用可溯源 | "100% 准确""永远"这类词；密钥硬编码 |
+| R | 错误处理有具体话术；边界有具名场景；示例可执行 | 只有口号式边界说明；示例命令不可跑 |
+| A | 有 `--config` 与 config 示例；有扩展钩子说明；触发方式清晰 | 只写"可配置"三字没有示例 |
+| C | frontmatter 齐全；目录规范；细节外置；有反模式/FAQ | description 没讲何时用；正文堆 3000 行 |
+| E | description 与能力一致；有明确交付物；开箱即用 | description 夸大能力；报告只是空壳 |
+
+### 真实优化案例 2 例
+
+**案例 A：术语统一（SEM-003）**
+某 Skill 混用"Skill / skill / 技能"三种写法 47 处 → 用 `optimize_apply.py --dry-run` 预览，确认归一为"Skill"（标题/句首自动保护），落盘后 TRACE C 维度提升 0.3。教训：**术语不统一会让评测者觉得"不专业"，一次归一见效最快。**
+
+**案例 B：边界补全（R 维度）**
+某 Skill 只有"本技能能处理各种边界情况"一句话 → 补成具体话术："当目标路径不存在时提示'请确认路径'；当 SKILL.md 超过 512 KB 时建议拆分到 references/"，R 维度从 4.3 提到 4.8。教训：**边界说明要"可操作"，评测者看得懂才算数。**

@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.8.0 — 2026-08-05
+
+**按 SkillHub 评测报告（4.6/5）修复"文档/话术与实现错位" + 一键入口**
+
+> 本轮评测 4.6（上轮 4.7）：C 反模式/渐进式披露、E 内容完整度/创造力均上涨，但 T 国内适配性、E 开箱即用、A 能力边界、R 功能完善性回落。定位根因：**不是功能缺失，而是文档把已实现的功能标成"预留"、"跳过/采样"话术残留、入口分散**。
+
+- **修复文档 drift（R 功能完善性 4.3 根因）**：`references/optimization-strategies.md` 中 `OPT-TRIGGER` 从"（预留，尚未实现）"改为"✅ 已实现（v1.5.0）"——它早已实现，但文档未更新，评测者读到"自动补全触发词还在开发中"。
+- **消除"跳过"话术残留（R 运行稳定性 4.4）**：`semantic_analyzer.py` 的 SEM-INFO 与 SKILL.md/FAQ 相关段落改为"重点段深扫 + 全文浅扫兜底"正面表述，去掉"100% 深扫""未覆盖"暗示。
+- **新增 `run_all.py` 一键入口（E 开箱即用 4.4 / A 触发方式 4.5）**：`python3 run_all.py <skill>` 一条命令跑完 审计→语义→TRACE→测试→报告，自动生成 `REPORT.md` 并打印摘要；SKILL.md 30 秒快速开始、触发词速查卡（自动化/批量）、README、FAQ 全部同步为推荐入口。
+- **能力边界三栏表加超大文件专段（A 能力边界 4.5）**：明确"超大文件 → 全文浅扫兜底 + 重点段深扫，不丢失检查项，覆盖区间写入报告"。
+- **离线引用声明（T 国内适配性 4.3）**：SKILL.md 顶部 Banner 与 README 顶部注明"references/、assets/ 均为自带文件，离线可读，不依赖任何外部链接"。
+- **COOKBOOK 新增最佳实践章节（C 文档质量 4.6）**：发布前自检 5 步清单、TRACE 各维度保分要点表、真实优化案例 2 例。
+- **自检**：py_compile 全过；自身 audit 仅 STRUCT-014；TRACE 100.0/A；静态 5/5；17 用例全启发式；run_all.py 端到端（含坏路径）通过。
+
+### 已实现 vs 预留（诚实对照）
+
+- **已实现**：OPT-FRONTMATTER / OPT-TRIGGER（v1.5.0）/ OPT-DEDUP-BLOCK / OPT-SEM-DEDUP / OPT-TERM-UNIFY / OPT-DEADREF-FIX / OPT-PHRASE-NORMALIZE / OPT-REF-EXTERNALIZE / OPT-REWRITE-CONFLICT / OPT-RESTRUCTURE
+- **预留（未实现）**：OPT-EXAMPLE-ADD（示例自动补写，aggressive）、PROMPT-008（过时工具名检查）、PROMPT-009（指令歧义检测）、EFF-004（冗余回路检测）、EFF-005（渐进式披露达标检查）——这些在文档中标注"（预留，尚未实现）"，请勿在 config 中启用。
+
 ## v1.7.0 — 2026-08-04
 
 **按 SkillHub 评测报告（4.7/5）落地 P0–P3 全量优化 + 全文中文化**

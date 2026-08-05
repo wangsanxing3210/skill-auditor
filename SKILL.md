@@ -1,6 +1,6 @@
 ---
 name: skill-auditor
-version: 1.7.0
+version: 1.8.0
 description: '用于审查、评测、测试、优化其他任何 Skill 的元技能（meta-skill），不限定具体工具框架，适用于 WorkBuddy、OpenClaw 等所有基于 SKILL.md 的 Skill。当用户需要审查/评测/优化某个 SKILL.md、评估技能质量、查找冗余或不一致的提示词、测试技能的边界情况、运行 TRACE 五维评测，或生成技能改动的前后对比报告时使用。触发方式包括：「审查这个 Skill」「优化 SKILL.md」「给这个 Skill 做个 TRACE 评测」「测一下这个技能的边界情况」「Skill 提示词冗余检测」「对比优化前后」「帮我看看这个 skill 写得怎么样」等。'
 agent_created: true
 ---
@@ -9,7 +9,8 @@ agent_created: true
 
 > **纯本地 · 零网络依赖 · 零配置 · 全中文界面 · 下载即用**
 > 审计 / 评测 / 测试 / 优化全部在本机完成，不上传你的 Skill 内容，不访问外网；审查、语义分析、TRACE 评分、静态测试无需任何模型或网络配置；只有"模型输出测试"是可选且完全可跳过的高级配置。
-> 一行命令拿到完整报告：`python3 scripts/build_report.py <skill_dir>` 即生成 `.skill-audit/REPORT.md`。
+> 一条命令拿到完整报告：`python3 scripts/run_all.py <skill_dir>` 自动跑完 审计 → 语义 → TRACE → 测试 → 报告，生成 `.skill-audit/REPORT.md`。
+> 本 Skill 引用的 `references/`、`assets/` 均为自带文件，离线可读，不依赖任何外部链接。
 
 ## Overview
 
@@ -31,7 +32,7 @@ agent_created: true
 | 优化（预览） | "把提示词里重复的地方合并一下，先给我看看" / "我想优化但别直接改" | 任何想改但怕改坏的作者 | Phase 4 dry-run |
 | 优化（落盘） | "确认优化" / "就按这个改" / "apply" | 看过预览、确认无误后 | Phase 4 apply |
 | 报告 | "对比优化前后改了什么" / "给我一份 REPORT.md" | 需要给团队/客户交付审查结论的人 | Phase 5 |
-| 自审 / 批量 | "帮我看看这个 skill 有没有隐藏 bug" / "把所有 skills 都审一遍" | 维护多个 Skill 的团队负责人 | 全流程 |
+| 自动化 / 批量 | "把所有 skills 都审一遍" / CI 里想直接调用 | 维护多个 Skill 的团队负责人、流水线脚本 | 全流程（`run_all.py <skill>` 一条命令） |
 
 > **不知道怎么开口？** 从这三个字开始：**「审」**（审查这个 skill）、**「修」**（帮我优化）、**「比」**（对比优化前后）。说完 skill-auditor 会追问路径和细节，你只需要回答。
 > 提示：不需要记特殊命令，用自然语言描述意图即可；skill-auditor 会先澄清模糊点再动手（参见「能力边界与异常处理 → 澄清问卷」）。
@@ -40,7 +41,7 @@ agent_created: true
 
 - [Overview](#overview)
 - [触发词速查卡（场景 → 说法 → 执行阶段）](#触发词速查卡场景-说法-执行阶段)
-- [30 秒快速开始（端到端 4 步：从 clone 到拿到 REPORT.md）](#30-秒快速开始端到端-4-步从-clone-到拿到-reportmd)
+- [30 秒快速开始（端到端 3 步：一条命令拿到 REPORT.md）](#30-秒快速开始端到端-3-步一条命令拿到-reportmd)
 - [什么时候用（When To Use）](#什么时候用when-to-use)
 - [能力边界与异常处理](#能力边界与异常处理)
 - [设计原则（Design Principles）](#设计原则design-principles)
@@ -56,16 +57,16 @@ agent_created: true
 
 配套文档：`FAQ.md`（12 条问答 + 反模式表）、`COOKBOOK.md`（3 个完整场景 + 自然语言使用速查）。
 
-## 30 秒快速开始（端到端 4 步：从 clone 到拿到 REPORT.md）
+## 30 秒快速开始（端到端 3 步：一条命令拿到 REPORT.md）
 
 ```bash
 # 1. 进入待审 Skill（示例：~/.workbuddy/skills/foo）
 cd ~/.workbuddy/skills/foo
 
-# 2. 一行命令生成完整报告（无需任何配置）
-python3 ~/.workbuddy/skills/skill-auditor/scripts/build_report.py .
+# 2. 一条命令跑完 审计 → 语义 → TRACE → 测试 → 报告（无需任何配置）
+python3 ~/.workbuddy/skills/skill-auditor/scripts/run_all.py .
 
-# 3. 查看报告（按严重度排序的发现 + TRACE 五维评分 + 测试结论 + 优化 diff）
+# 3. 查看报告（按严重度排序的发现 + TRACE 五维评分 + 测试结论 + 覆盖度）
 cat .skill-audit/REPORT.md
 ```
 
@@ -75,9 +76,11 @@ cat .skill-audit/REPORT.md
 2. **你会得到什么**：一份结构化报告——审计发现（结构/提示词/效率）+ TRACE 五维评分 + 测试结论；需要时才出前后 diff。
 3. **想改就改，但先看清**：优化默认只给建议与 dry-run 预览；真正落盘需你确认，且每次改动都可回退。
 
-**零配置开箱可用**：审查、语义分析、TRACE 评测、静态完整性测试都不需要任何外部模型或网络，下载即用；只有"模型输出测试"才需要可选的 `--model-config`。
+**零配置开箱可用**：`run_all.py .` 一条命令跑完所有阶段，审查、语义分析、TRACE 评测、静态测试、报告生成都不需要任何外部模型或网络，下载即用；只有"模型输出测试"才需要可选的 `--model-config`。
 
-**稳定性与资源保护**：SKILL.md 超过 512 KB 或正文超过 3 万词 / 3000 句时，语义分析会自动降级为"采样模式"（开头/中间/结尾三段均匀采样），并明确告诉你覆盖了哪些句段；所有错误都会给出明确的"原因 + 下一步操作建议"，不会直接崩溃。
+**离线自带，无需联网**：本 Skill 引用的所有 `references/`、`assets/` 均为自带文件，离线可读，不依赖任何外部链接。
+
+**稳定性与资源保护**：SKILL.md 超过 512 KB 或正文超过 3 万词 / 3000 句时，语义分析自动采用"重点段深扫 + 全文浅扫兜底"（术语、冲突、短语、意图漂移对全文执行，近义句重复在开头/中间/结尾重点段深扫），覆盖区间会写入报告；所有错误都会给出明确的"原因 + 下一步操作建议"，不会直接崩溃。
 
 > **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要完整场景案例看 `COOKBOOK.md` → 遇到卡点查 `FAQ.md` → 自定义看 `## 配置`。
 
@@ -98,7 +101,7 @@ cat .skill-audit/REPORT.md
 |------|------|----------|
 | 能做 | 审查 / 评测 / 测试 / 安全优化任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 等框架通用） | 直接执行 Phase 0–5 标准流程 |
 | 不做 | ①改写目标 Skill 的领域业务逻辑 ②处理二进制/非文本资源 ③保证某个评分或"一定通过" ④访问私有仓库或外发内容 | 明确告知不适用，不强行执行 |
-| 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 | 优雅降级，不拒答但标注假设与边界 |
+| 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 ④超大文件（>3 万词 / 3000 句）→ 全文浅扫兜底 + 重点段深扫，不丢失检查项，覆盖区间写入报告 | 优雅降级，不拒答但标注假设与边界 |
 
 ### 异常处理（诊断 → 修复 话术库）
 
@@ -279,7 +282,7 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
 
   ```bash
   cd ~/.workbuddy/skills/skill-auditor
-  python3 scripts/build_report.py .   # 一行命令拿到自审报告
+  python3 scripts/run_all.py .   # 一条命令拿到自审报告
   ```
 
 ## 配置（Configuration）
@@ -322,6 +325,7 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
 
 | 脚本 | 用途 | 关键参数 |
 |------|------|----------|
+| `run_all.py` | **一键全流程**：审计→语义→TRACE→测试→报告 | `<skill>`（推荐入口） |
 | `audit_skill.py` | 结构 / 提示词质量 / 效率审计 | `--json`, `--config` |
 | `semantic_analyzer.py` | 冗余、术语、冲突检测 | `--json`, `--min-sentence-len` |
 | `trace_eval.py` | TRACE 五维评分 | `--json`, `--config`, `--prior trace.json` |
@@ -375,7 +379,7 @@ A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检
 A：每个错误码都附带"下一步"建议。例如 `E_TOO_LARGE` 表示 SKILL.md 超过 512 KB，建议把细节移到 `references/`；`E_NO_SKILL_MD` 表示路径不对。按提示操作即可，无需翻源码。
 
 **Q9：我的 SKILL.md 很大（几千行），会不会卡住？**
-A：不会。SKILL.md 超过 512 KB 时直接给出友好提示；正文超过 3 万词 或 3000 句时，语义分析自动进入"三段均匀采样模式"（开头/中间/结尾各约 500 句，共 1500 句），并明确告诉你覆盖了哪些句段。
+A：不会。SKILL.md 超过 512 KB 时直接给出友好提示；正文超过 3 万词 或 3000 句时，语义分析自动采用"重点段深扫 + 全文浅扫兜底"——术语、冲突、短语、意图漂移对全文执行，近义句重复在开头/中间/结尾重点段深扫，覆盖区间会写入报告，不会丢失检查项。
 
 **Q10：完整测试一定要配 `--model-config` 吗？**
 A：不是必须的。静态完整性测试（引用是否存在、frontmatter 是否合法、代码围栏是否配对等）零配置即可跑；只有"把测试用例交给真实模型执行"这一步才需要 `--model-config`，且可以跳过。
@@ -397,7 +401,7 @@ A：可以。批量审查的最小脚本：
 
 ```bash
 for d in ~/.workbuddy/skills/*/; do
-  [ -f "$d/SKILL.md" ] && python3 ~/.workbuddy/skills/skill-auditor/scripts/build_report.py "$d"
+  [ -f "$d/SKILL.md" ] && python3 ~/.workbuddy/skills/skill-auditor/scripts/run_all.py "$d"
 done
 ```
 每个 Skill 会在自己的 `.skill-audit/REPORT.md` 生成报告；汇总比较可用：
@@ -421,7 +425,7 @@ A：`CHANGELOG.md` 记录每次发布的功能改动、bug 修复与已知局限
 | 1 | description 没讲何时用 | "这是一个审查工具。" | C/E 低：评测者不知道什么时候该触发它 | 加 WHEN 触发场景 + 典型用户说法 | "当需要审查/评测/优化基于 SKILL.md 的 Skill 时使用" |
 | 2 | 触发词只堆关键词 | "触发词：审查、评测、优化" | A 低：关键词堆叠不等于"一句话就能唤起" | 改成场景→说法→执行阶段映射表 | 本 Skill 的「触发词速查卡」（7 大场景 + 人话说法） |
 | 3 | 边界处理只有口号 | "本技能能处理各种边界情况。" | R 低：无具体话术，等于没写 | 列空输入/超大/缺失的具体应对话术 | "能力边界与异常处理"三栏表 + 诊断→修复话术库 |
-| 4 | 示例不可执行 | "运行脚本即可。" | R/C 低：示例无命令、无路径、无预期产出 | 用可复制的 ```bash 代码块 | 本 Skill 的 30 秒快速开始（cd → build_report.py → cat） |
+| 4 | 示例不可执行 | "运行脚本即可。" | R/C 低：示例无命令、无路径、无预期产出 | 用可复制的 ```bash 代码块 | 本 Skill 的 30 秒快速开始（run_all.py 一条命令 → cat REPORT.md） |
 | 5 | 错误提示只有代码 | "E_TOO_LARGE" | R 低：非技术用户看不懂，也无下一步 | 用"原因 + 下一步"人话话术 | 本 Skill 的错误提示已升级为"原因 + 一键命令" |
 | 6 | 文档全是命令行 | 全文只有 ```bash 代码块 | A/C 低：普通用户没有命令行习惯 | 加对话式使用场景速查 | COOKBOOK「自然语言使用速查」表 |
 | 7 | 所有细节堆在正文 | SKILL.md 3000 行，references/ 为空 | C 低：渐进式披露失败，正文淹没读者 | 外置到 references/，正文只留流程 | 本 Skill 的 7 个脚本细节全部在 scripts/，正文只留用法 |

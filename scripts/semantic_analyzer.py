@@ -263,7 +263,7 @@ def main():
                 "%s，已启用分段采样：近义句重复（O(n²)）只在重点段 %s 深度检查；"
                 "术语一致性、冲突指令、高频短语、意图漂移已对全文做全量浅扫兜底。" % (
                     reason, "、".join(sampled_blocks)),
-                "如需 100% 深扫（含近义句两两比较），请拆分正文到 references/ 或减少字数"))
+                "如需更深度的逐句两两比较，可将大段正文外置到 references/ 后重跑"))
         else:
             sents_sampled = sents_full
         # O(n²) 近义句重复：heavy 时仅采样段；否则全量
