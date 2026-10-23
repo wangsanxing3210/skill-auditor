@@ -49,12 +49,52 @@ def run_builtin(skill, cfg):
         if not any(k in desc for k in ("当", "用于", "触发", "use", "when", "Use")):
             add("STRUCT-005", "medium", "structure", "SKILL.md:description",
                 "description 未包含触发场景表述", "加入 WHEN 触发条件（何时使用该技能）")
-        if desc.strip().lower().startswith(("you ", "你应该", "你应该", "use this")):
+        if re.search(r"(?:^|[\s，。；])(?:i can|you can|you should|我可以|你可以|你能|你应该)",
+                     desc.strip().lower()):
             add("STRUCT-006", "medium", "structure", "SKILL.md:description",
-                "description 未用第三人称", "改为第三人称：'This skill should be used when...'")
+                "description 用第一/第二人称，弱化被发现与被路由", 
+                "改为第三人称能力描述：'审查…的技能，当用户需要…时使用'")
     if fm.get("agent_created") is not True:
         add("STRUCT-004", "low", "structure", "SKILL.md", "缺少 agent_created: true",
             "加入 agent_created: true 以便后续可被修改")
+
+    # --- 规范合规（对标 agentskills.io 规范与主流 marketplace 校验项） ---
+    name = (fm.get("name") or "").strip()
+    if name:
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) or not 1 <= len(name) <= 64:
+            add("STRUCT-015", "medium", "structure", "SKILL.md:name",
+                "name 不符合规范：%r（应为 1-64 字符、小写字母数字与连字符、无首尾或连续连字符）" % name,
+                "改成 kebab-case 标识，如 my-skill-name")
+        dir_name = os.path.basename(os.path.abspath(skill_dir))
+        if dir_name and dir_name != name and re.fullmatch(r"[a-z0-9][a-z0-9-]*", dir_name):
+            add("STRUCT-016", "low", "structure", "SKILL.md:name",
+                "name 与所在目录名不一致：name=%s，目录=%s" % (name, dir_name),
+                "把目录名改成与 name 一致，或反之（多数宿主以 name 作为唯一标识）")
+    if desc:
+        if len(desc) > 1024:
+            add("STRUCT-017", "medium", "structure", "SKILL.md:description",
+                "description 长度 %d 字符，超过 1024 上限" % len(desc),
+                "把触发细节移到正文 Trigger 段落，description 保留能力 + WHEN")
+        elif len(desc) < 20:
+            add("STRUCT-017", "low", "structure", "SKILL.md:description",
+                "description 仅 %d 字符，过短不利于被发现" % len(desc),
+                "补一句 WHEN 触发场景与 3-5 个关键词")
+    n_body_lines = len(body.splitlines())
+    if n_body_lines > 500:
+        add("STRUCT-018", "low", "structure", "SKILL.md",
+            "正文 %d 行，超过 500 行惯例上限" % n_body_lines,
+            "把细节拆到 references/，SKILL.md 只留流程与指针")
+
+    # 机器绝对路径：换台机器就失效（~/ 形式的家目录相对路径不在此列）
+    # 覆盖 POSIX（/Users、/home、/root、file:///）、Windows 盘符（C:\ 与 C:/）、UNC（\\host\share）。
+    # 盘符前加负向断言，避免把 https:// 里的 "s:/" 误判成 D 盘路径。
+    for m in re.finditer(r"(?:/Users/|/home/|/root/|file:///)"
+                         r"|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s)\"'`]+"
+                         r"|\\\\[A-Za-z0-9_.\-]+\\[^\s\"'`]+", raw):
+        add("STRUCT-019", "low", "structure", "SKILL.md",
+            "正文出现机器绝对路径: %s" % m.group(0)[:60],
+            "改用相对路径（scripts/x.py）或 <skill-dir> 占位，避免换机失效")
+        break
 
     # referenced resource existence
     for ref in C.referenced_paths(body):
@@ -164,6 +204,17 @@ def run_builtin(skill, cfg):
             "存在 %d 个超长内联代码块（>40 行），可外置到 references/" % len(big_blocks),
             "将大段可复用内容拆分为 references/ 下的独立文件，SKILL.md 仅引用入口")
 
+    # EFF-005: 渐进式披露的另一半——外置了却没人引用，等于死资源
+    referenced = set(C.referenced_paths(body))
+    for f in sorted(files):
+        if not (f.startswith("references/") or f.startswith("assets/")):
+            continue
+        if f in referenced:
+            continue
+        add("EFF-005", "low", "efficiency", f,
+            "孤立资源：文件存在，但 SKILL.md 从未引用它",
+            "在 SKILL.md 正文链接该文件（让加载链路可达），或删除无用资源")
+
     # repository metadata files that some skill hosts skip (e.g. .gitignore, LICENSE)
     for f in files:
         name = os.path.basename(f)
@@ -213,7 +264,7 @@ def check_doc_arg_consistency(skill, rules):
     Scans SKILL.md command examples for `scripts/X.py ... --flag` and verifies
     each flag is declared via add_argument in that script. Catches the classic
     doc/code drift where a SKILL.md documents a flag the script never implemented
-    (the very bug found during skill-auditor's own self-audit).
+    (the very bug found during skill-inspector's own self-audit).
     """
     findings = []
     body = skill["body"]
@@ -261,6 +312,57 @@ def run_custom(skill, cfg):
     return m.check(skill, {"config": cfg, "thresholds": cfg.get("thresholds", {})}) or []
 
 
+def to_sarif(findings, tool_name="skill-inspector"):
+    """Render findings as SARIF 2.1.0 so CI / GitHub Security tab can consume them.
+
+    Level mapping: high -> error, medium -> warning, low -> note.
+    Location "SKILL.md:12" is turned into a physicalLocation with startLine.
+    """
+    level = {"high": "error", "medium": "warning", "low": "note"}
+    rules, results, seen = [], [], set()
+    for f in findings:
+        rid = f.get("rule_id", "UNKNOWN")
+        if rid not in seen:
+            seen.add(rid)
+            rule = {
+                "id": rid,
+                "name": rid.replace("-", "_"),
+                "shortDescription": {"text": "%s（%s）" % (rid, f.get("category", ""))},
+                "properties": {"tags": ["skill-audit", f.get("category", "general")]},
+            }
+            if f.get("owasp"):
+                rule["properties"]["tags"].append("OWASP-Agentic-Skills-" + f["owasp"])
+                rule["shortDescription"]["text"] = "%s（%s）" % (rid, f.get("title", f.get("category", "")))
+            rules.append(rule)
+        loc = f.get("location", "")
+        path, _, line = loc.partition(":")
+        try:
+            start = int(re.sub(r"\D.*", "", line) or 1)
+        except ValueError:
+            start = 1
+        results.append({
+            "ruleId": rid,
+            "level": level.get(f.get("severity", "low"), "note"),
+            "message": {"text": "%s → %s" % (f.get("evidence", ""), f.get("recommendation", ""))},
+            "locations": [{"physicalLocation": {
+                "artifactLocation": {"uri": path or "SKILL.md"},
+                "region": {"startLine": max(1, start)},
+            }}],
+        })
+    return {
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [{
+            "tool": {"driver": {
+                "name": tool_name,
+                "informationUri": "https://github.com/wangsanxing3210",
+                "rules": rules,
+            }},
+            "results": results,
+        }],
+    }
+
+
 def _emit(code, message, next_step, json_mode):
     if json_mode:
         print(json.dumps({"ok": False, "error": {"code": code, "message": message, "next_step": next_step}},
@@ -275,9 +377,12 @@ def main():
     ap = argparse.ArgumentParser(
         description="Structural / prompt-quality / efficiency audit of a skill.")
     ap.add_argument("target", help="Skill directory or path to SKILL.md")
-    ap.add_argument("--json", action="store_true", help="Output JSON")
+    ap.add_argument("--json", action="store_true", help="Output JSON（等价 --format json）")
+    ap.add_argument("--format", choices=["text", "json", "sarif"], default=None,
+                    help="输出格式：text / json / sarif（SARIF 2.1.0，供 CI 与 GitHub Security 用）")
     ap.add_argument("--config", default=None, help="Path to config.json")
     args = ap.parse_args()
+    fmt = args.format or ("json" if args.json else "text")
 
     try:
         cfg = C.read_config(args.config)
@@ -286,7 +391,7 @@ def main():
         findings += run_custom(skill, cfg)
     except Exception as e:
         code, message, next_step = C.humanize_error(e, "audit_skill")
-        _emit(code, message, next_step, args.json)
+        _emit(code, message, next_step, fmt != "text")
         sys.exit(1)
 
     # de-dup by (rule_id, location)
@@ -299,9 +404,11 @@ def main():
         seen.add(key)
         uniq.append(f)
 
-    if args.json:
+    if fmt == "json":
         print(json.dumps({"ok": True, "target": skill["dir"], "count": len(uniq), "findings": uniq},
                          ensure_ascii=False, indent=2))
+    elif fmt == "sarif":
+        print(json.dumps(to_sarif(uniq), ensure_ascii=False, indent=2))
     else:
         print("Audit findings for %s (%d):" % (skill["dir"], len(uniq)))
         for f in uniq:

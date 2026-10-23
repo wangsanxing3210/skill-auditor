@@ -61,15 +61,19 @@ def _dim_evidence(trace, dim):
     return "; ".join("%s: %s" % (k, v) for k, v in ev.items())
 
 
-def _build_next_steps(trace, findings):
+def _build_next_steps(trace, findings, sec_findings=None):
     steps = []
+    sec_high = [f for f in (sec_findings or []) if f.get("severity") == "high"]
+    if sec_high:
+        steps.append("先处理 %d 条 high 级**安全**发现（第 4 节），例如 %s。" %
+                     (len(sec_high), sec_high[0].get("rule_id")))
     sev_counts = {}
     for f in findings:
         sev_counts[f.get("severity", "low")] = sev_counts.get(f.get("severity", "low"), 0) + 1
     if sev_counts.get("high"):
         steps.append("优先处理 %d 条 high 级发现（见第 3 节），它们会阻断发布。" %
                      sev_counts["high"])
-    else:
+    elif not sec_high:
         steps.append("当前无 high 级阻断项，可进入优化/发布评估。")
     weakest = trace.get("weakest_dimension")
     if weakest:
@@ -202,6 +206,22 @@ def main():
 
         applied, report_only, change_notes, diff_excerpt = _parse_opt_report(opt_path)
 
+        # --- 安全审查（OWASP Agentic Skills） ---
+        security = _load("security.json", skill_dir)
+        sec_findings = (security or {}).get("findings", [])
+        sec_summary = (security or {}).get("summary", {})
+        if security is None:
+            security_line = "（未运行安全扫描）"
+        elif not sec_findings:
+            security_line = "未命中已知高危模式（SEC-001~008）；这不等于安全，仅代表没撞上规则集"
+        else:
+            by_sev = sec_summary.get("by_severity", {})
+            security_line = "命中 %d 条（high %d / medium %d / low %d）" % (
+                len(sec_findings), by_sev.get("high", 0), by_sev.get("medium", 0), by_sev.get("low", 0))
+        sec_ast = sec_summary.get("by_owasp", {})
+        security_ast_line = ("、".join("%s×%d" % (k, v) for k, v in sorted(sec_ast.items()))
+                             or "（无）")
+
         ctx = {
             "skill_name": skill_name,
             "skill_path": skill_dir,
@@ -225,6 +245,9 @@ def main():
             "prior_overall": trace.get("prior_overall", "—") if trace else "—",
             "delta": trace.get("delta", "—") if trace else "—",
             "findings": findings,
+            "security_line": security_line,
+            "security_ast_line": security_ast_line,
+            "security_findings": sec_findings,
             "static_pass": static_pass,
             "static_total": static_total,
             "cases_total": cases_total,
@@ -237,7 +260,7 @@ def main():
             "report_only_strategies": report_only,
             "change_notes": change_notes,
             "diff_excerpt": diff_excerpt,
-            "next_steps": _build_next_steps(trace or {}, findings),
+            "next_steps": _build_next_steps(trace or {}, findings, sec_findings),
         }
         # flatten next_steps into next_step_1/2/3
         for i, step in enumerate(ctx["next_steps"][:3], 1):

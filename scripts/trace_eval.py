@@ -22,6 +22,9 @@ SECRET_RE = re.compile(r"(api[_-]?key|secret|token|password|passwd|sk-[A-Za-z0-9
 DESTRUCTIVE = ["删除", "外发", "付费", "rm -rf", "delete", "remove", "send", "publish"]
 CAUTION = ["确认", "警示", "谨慎", "警告", "warning", "confirm", "careful", "风险提示"]
 EXAGG = ["100%", "永远", "绝对", "always accurate", "never fail", "100 percent"]
+# 教材/禁止语境：这些行在讲"不要这么写"，不应按夸大承诺扣分
+NEG_CONTEXT = ("反模式", "反例", "错误示范", "不要", "禁止", "避免", "示例",
+               "anti-pattern", "avoid", "wrong", "bad example", "❌")
 PRIVACY = ["个人文件", "Desktop", "隐私", "personal file", "home directory"]
 
 
@@ -66,14 +69,24 @@ def metrics_T(skill, body, art):
     # T3 exaggeration: skip code fences and inline code so quoted examples
     # (e.g. anti-pattern tables that cite "100% 准确" as a bad example) don't
     # trigger a false positive. Also exempt technical-usage contexts where the
-    # keyword has a non-exaggerated meaning (e.g. "绝对路径" = absolute path).
+    # keyword has a non-exaggerated meaning (e.g. "绝对路径" = absolute path),
+    # quoted citations, and lines that are explicitly teaching what NOT to do.
     body_no_code = C.strip_code_fences(body)
-    bl = body_no_code.lower()
-    hits = [w for w in EXAGG if w.lower() in bl]
+    bl_raw = body_no_code.lower()
+    hits = []
+    for line in body_no_code.splitlines():
+        low = line.lower()
+        if any(m in low for m in NEG_CONTEXT):
+            continue                      # 反模式 / 禁止 / avoid …
+        clean = C.strip_quoted_examples(line).lower()
+        hits += [w for w in EXAGG if w.lower() in clean]
     # technical exemptions: these patterns are not exaggerations
-    tech_ok = all(not (w in ("绝对", "always") and (
-        "绝对路径" in bl or "绝对定位" in bl or "absolute path" in bl)) for w in hits)
-    t3 = m_pass() if (not hits or tech_ok) else m_fail()
+    # "绝对路径/绝对定位" = absolute path/positioning; "绝对化承诺" = the *name* of the
+    # anti-pattern being described, not a promise made by the skill itself.
+    tech_context = ("绝对路径" in bl_raw or "绝对定位" in bl_raw or "absolute path" in bl_raw
+                    or "绝对化" in bl_raw)
+    effective_hits = [w for w in hits if not (w in ("绝对", "always") and tech_context)]
+    t3 = m_pass() if not effective_hits else m_fail()
     # T4 privacy note
     has_p = any(w.lower() in body.lower() for w in PRIVACY)
     t4 = m_pass() if (not has_p or has_c) else m_part()

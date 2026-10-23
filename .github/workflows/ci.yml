@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 全平台统一 UTF-8：Windows runner 默认代码页是 cp1252，不设这个变量时
+# 打印中文报告会 UnicodeEncodeError（工具本身没问题，死在控制台上）。
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 三平台 × 头尾两个 Python 版本：macOS / Windows 只跑 3.9 与 3.13，
+        # Ubuntu 额外补 3.12 覆盖中间版本（Linux 上最便宜）。
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.9", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: 环境自述（平台 / 编码）
+        run: |
+          python -c "import sys, locale; print(sys.platform, sys.version.split()[0]); print('stdout:', sys.stdout.encoding); print('fs:', sys.getfilesystemencoding())"
+
+      - name: 语法自检
+        run: python -m compileall -q scripts tests
+
+      - name: 单元 / 端到端测试（stdlib unittest，含跨平台契约用例）
+        run: python scripts/selftest.py
+
+      - name: 自审门禁（不能有 high 级发现，TRACE 不低于 80）
+        run: python scripts/run_all.py . --fail-on high --fail-under 80
+
+      - name: 批量审计通道自检（只读，不落产物）
+        run: python scripts/batch_audit.py . --jobs 2 --json --out "${{ runner.temp }}/batch.json"
+
+  security:
+    name: SARIF
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 产出 SARIF（供 GitHub Security 面板聚合）
+        run: python scripts/audit_skill.py . --format sarif > skill-audit.sarif
+
+      - name: 上传 SARIF 到代码扫描
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: skill-audit.sarif

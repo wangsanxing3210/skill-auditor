@@ -1,6 +1,6 @@
 # Skill 审查 · 评测 · 优化报告
 
-> 由 `skill-auditor` 元 Skill 生成。报告整合 Phase 1–4 的产出，供发布前评审或迭代使用。
+> 由 `skill-inspector` 元 Skill 生成。报告整合 Phase 1–4 的产出，供发布前评审或迭代使用。
 
 ## 1. 基本信息
 
@@ -36,14 +36,25 @@
   - 建议：{{finding.recommendation}}
 {% endfor %}
 
-## 4. 测试结论
+## 4. 安全审查（OWASP Agentic Skills）
+
+- 结论：{{security_line}}
+- OWASP AST 分布：{{security_ast_line}}
+
+{% for sec in security_findings %}
+- **[{{sec.severity}}] {{sec.rule_id}}** {{sec.owasp}} @ `{{sec.location}}`
+  - 证据：{{sec.evidence}}
+  - 建议：{{sec.recommendation}}
+{% endfor %}
+
+## 5. 测试结论
 
 - 静态完整性：{{static_pass}}/{{static_total}} 通过
 - 用例：{{cases_total}} 项（已执行 {{cases_executed}}，待人工 {{cases_manual}}，启发式判定 {{cases_heuristic}}）
 - 边界/准确性摘要：{{test_summary}}
 - **扫描覆盖度**：{{coverage}}
 
-## 5. 优化前后对照
+## 6. 优化前后对照
 
 - 自动应用策略：{{applied_strategies}}
 - 仅建议（人工处理）：{{report_only_strategies}}
@@ -54,11 +65,11 @@
 {{diff_excerpt}}
 ```
 
-## 6. 后续建议
+## 7. 后续建议
 
 1. {{next_step_1}}
 2. {{next_step_2}}
 3. {{next_step_3}}
 
 ---
-*报告由 skill-auditor 生成；所有自动改动均可通过 `.skill-audit/` 下的原始快照与 diff 还原。*
+*报告由 skill-inspector 生成；所有自动改动均可通过 `.skill-audit/` 下的原始快照与 diff 还原。*

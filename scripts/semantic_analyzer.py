@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """semantic_analyzer.py — prompt semantic analysis.
 
-Detects near-duplicate sentences, repeated phrases, terminology inconsistency,
-conflicting instructions, and intent drift. Deterministic (no model calls).
+Detects near-duplicate sentences (SEM-001), synonym-substituted duplicates
+(SEM-006), repeated phrases, terminology inconsistency, conflicting instructions,
+and intent drift. Deterministic (no model calls) — SEM-006 uses an auditable
+concept-normalization table instead of embeddings.
 
 Usage:
   python3 semantic_analyzer.py <skill.md> [--json] [--min-sentence-len N]
@@ -27,6 +29,20 @@ DEFAULT_CLUSTERS = {
     "frontmatter": ["frontmatter", "前置元数据", "YAML头", "yaml头"],
 }
 
+# 同义改写检测用的**概念归一表**：同一概念的不同说法映射到同一个记号。
+# 只收"替换后意思不变"的强同义词，避免把近义词当同义词（宁缺勿滥）。
+# 可在 config.json 的 "synonyms" 里覆盖/扩充，例如加团队内部术语。
+DEFAULT_SYNONYMS = {
+    "CHECK": ["校验", "检查", "验证", "核查", "核对", "审核", "check", "verify", "validate", "inspect"],
+    "GENERATE": ["生成", "产出", "输出", "produce", "generate", "output", "emit"],
+    "LOAD": ["读取", "读入", "加载", "载入", "load", "read"],
+    "REMOVE": ["删除", "移除", "删掉", "清除", "remove", "delete"],
+    "MUST": ["必须", "务必", "一定要", "must", "required", "mandatory"],
+    "FORBID": ["禁止", "不要", "不得", "严禁", "切勿", "never", "must not", "do not"],
+    "BEFORE": ["之前", "以前", "事先", "before"],
+    "SUBMIT": ["提交", "上交", "submit"],
+}
+
 
 _PUNCT = "，。！？、；：\"'（）()[]{}…—.,!?;: \t\n\r"
 _PUNCT_TRANS = str.maketrans({p: " " for p in _PUNCT})
@@ -46,6 +62,64 @@ def jaccard(a, b):
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+def effective_synonyms(user):
+    """合并用户 synonyms 与内置词表：同名键覆盖，其余保留。
+
+    这样在 config 里只写一两组时不会把内置 8 组"删掉"——否则关掉了自己并不知道的
+    检查项，属于典型的配置陷阱。`_` 开头的注释键与非列表值一律忽略。
+    """
+    merged = {k: list(v) for k, v in DEFAULT_SYNONYMS.items()}
+    if isinstance(user, dict):
+        for k, v in user.items():
+            if str(k).startswith("_") or not isinstance(v, list) or not v:
+                continue
+            merged[str(k)] = [str(x) for x in v if str(x).strip()]
+    return merged
+
+
+def _syn_pairs(synonyms):
+    """展平成 (变体小写, 概念记号) 列表，长变体优先，避免'删掉'被'删除'截断。"""
+    pairs = []
+    for canon, variants in (synonyms or {}).items():
+        if not isinstance(variants, (list, tuple)):
+            continue
+        for v in variants:
+            pairs.append((str(v).lower(), canon))
+    pairs.sort(key=lambda x: -len(x[0]))
+    return pairs
+
+
+def normalize_synonyms(text, pairs):
+    """把同义说法替换成统一记号（CHECK / GENERATE …）。纯字符串替换，确定性可审计。"""
+    s = (text or "").lower()
+    for variant, canon in pairs:
+        if variant in s:
+            s = s.replace(variant, " %s " % canon)
+    return s
+
+
+def _substitutions(a, b, synonyms):
+    """两句话之间发生了哪些"同概念换词"，如 校验/检查。没有换词就不算改写重复。"""
+    al, bl = a.lower(), b.lower()
+    subs = []
+    for canon, variants in (synonyms or {}).items():
+        va = [v for v in variants if v.lower() in al]
+        vb = [v for v in variants if v.lower() in bl]
+        if va and vb and not (set(va) & set(vb)):
+            subs.append("%s≈%s" % (va[0], vb[0]))
+    return subs
+
+
+def _polarity(s):
+    """1=要求，-1=禁止，0=中性。极性不同的两句交给 SEM-004，不按重复报。"""
+    if any(w in s for w in NEG):
+        return -1
+    if any(w in s for w in POS):
+        return 1
+    return 0
+
 
 
 def split_sentences(body):
@@ -126,6 +200,56 @@ def near_dup_sentences(sents, th, minlen, heavy=False):
             if len(findings) >= 20:
                 return findings, ranges
     return findings, ranges
+
+
+def paraphrase_duplicates(sents, th_para, dup_th, minlen, synonyms, cap=15):
+    """检测"同义改写"型重复：用词不同、意思一样。
+
+    与 SEM-001 的分工：SEM-001 抓字面高度重合的句子；本函数抓**发生了术语替换**
+    （校验↔检查、生成↔产出……）导致字面相似度掉到阈值以下、但语义仍重复的句子。
+    三项精度闸门：① 必须真的换过词；② 极性必须一致（"必须"vs"禁止"归 SEM-004）；
+    ③ 已在 SEM-001 报过的不重复报。
+    """
+    pairs = _syn_pairs(synonyms)
+    items = []
+    for s in sents:
+        if len(s) < max(minlen, 12):
+            continue
+        base = tokenize(s) - STOP
+        if len(base) < 5:
+            continue
+        norm = tokenize(normalize_synonyms(s, pairs)) - STOP
+        if len(norm) < 4:
+            continue
+        items.append((s, base, norm))
+
+    out = []
+    n = len(items)
+    for i in range(n):
+        si, bi, ni = items[i]
+        for j in range(i + 1, n):
+            sj, bj, nj = items[j]
+            shared = len(ni & nj)
+            if shared < 4:
+                continue
+            if jaccard(bi, bj) >= dup_th:
+                continue            # 字面已够像，SEM-001 负责
+            sc = jaccard(ni, nj)
+            if sc < th_para:
+                continue
+            if _polarity(si) != _polarity(sj):
+                continue
+            subs = _substitutions(si, sj, synonyms)
+            if not subs:
+                continue            # 没换词就只是普通部分重叠，不报
+            out.append(C.make_finding(
+                "SEM-006", "medium", "semantic", "SKILL.md",
+                "同义改写疑似重复(归一相似度 %.2f，换词: %s): '%s' ≈ '%s'" % (
+                    sc, "、".join(subs[:3]), si[:40], sj[:40]),
+                "保留一条即可；若两句侧重不同（例如一条讲条件、一条讲动作），补上区分点"))
+            if len(out) >= cap:
+                return out
+    return out
 
 
 def repeated_phrases(body, min_count):
@@ -246,6 +370,7 @@ def main():
         th = cfg.get("thresholds", {})
         minlen = args.min_sentence_len or th.get("min_sentence_len", 8)
         dup_j = th.get("dup_sentence_jaccard", 0.6)
+        para_j = th.get("paraphrase_jaccard", 0.55)
         rep_min = th.get("repeat_phrase_min_count", 4)
         drift = th.get("drift_threshold", 0.2)
 
@@ -268,6 +393,9 @@ def main():
             sents_sampled = sents_full
         # O(n²) 近义句重复：heavy 时仅采样段；否则全量
         findings += near_dup_sentences(sents_sampled, dup_j, minlen, heavy=heavy)[0]
+        # O(n²) 同义改写：与 SEM-001 同批句子，用归一后的记号比对
+        synonyms = effective_synonyms(cfg.get("synonyms"))
+        findings += paraphrase_duplicates(sents_sampled, para_j, dup_j, minlen, synonyms)
         # O(n) 全量检查：heavy 与正常模式下都对全文执行（全量浅扫兜底）
         findings += repeated_phrases(body, rep_min)
         clusters = cfg.get("term_clusters", DEFAULT_CLUSTERS)

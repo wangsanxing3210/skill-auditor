@@ -71,7 +71,7 @@ def build_term_suggestions(raw, clusters=None):
 
 def safe_replace(text, variant, canon):
     """Replace variant with canon. ASCII: word-boundary safe (won't touch
-    'skill-auditor' or 'SKILL.md'). Protection: never rewrite inside a Markdown
+    'skill-inspector' or 'SKILL.md'). Protection: never rewrite inside a Markdown
     heading line, and never lowercase a word that begins a sentence/line (so
     '# Skill Auditor' and 'A Skill that…' stay capitalized). CJK: substring replace."""
     if re.search(r"[a-z]", variant):

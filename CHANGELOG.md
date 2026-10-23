@@ -1,5 +1,138 @@
 # Changelog
 
+## v1.10.1 — 2026-10-23
+
+**补上最后一条：Windows 真能跑（三平台 CI + 编码 / 路径归一）**
+
+> v1.10.0 结尾留了一句"不跨平台验证运行时行为"。这轮把它做实：不是写句"支持 Windows"，
+> 而是把 Windows 上会崩的三处真改掉，再交给 CI 的三个平台各自跑一遍。
+
+### 修复（Windows 上必崩、macOS 上完全无感）
+
+- **标准输出编码**：新增 `_common.ensure_utf8_stdio()`，导入时把 stdout/stderr 固定为 UTF-8。
+  Windows 默认按本地代码页（cp936 / cp1252）写标准输出，报告里的中文会直接抛 `UnicodeEncodeError`——
+  工具逻辑没问题，死在控制台上。
+- **子进程解码**：`run_all.py` / `batch_audit.py` 调子脚本时统一 `encoding="utf-8", errors="replace"`
+  并注入 `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`；否则父进程按本地代码页解码子进程的中文 JSON 会报错。
+- **路径分隔符归一**：新增 `_common.posix_rel()`，`load_skill` 与 `diagnose` 的文件清单统一用 `/`。
+  反斜杠会让 `.skill-audit/`、`.git/` 的排除判断和 `references/` 引用检查在 Windows 上**静默失效**（不报错，直接漏检）。
+- **`--depth` 语义跨平台一致**：`batch_audit.py` 改按相对路径段数算深度，不再数字符数——
+  Windows 的盘符 `C:\` 会让字符数偏多，同一份目录树在两平台跑出不同结果。
+- **测试夹具用 `os.devnull`**：原来 `--out /dev/null` 在 Windows 上根本不存在，用例会假失败。
+- **`diagnose.py` 文件句柄**：`json.load(open(...))` 改为 `with`，Windows 上未关闭句柄会阻止删除目录。
+
+### 新增
+
+- **CI 三平台矩阵**：`ubuntu-latest` / `macos-latest` / `windows-latest` × Python 3.9、3.13（Ubuntu 补 3.12），
+  全局 `PYTHONUTF8=1`；另拆出 `security` job 专门上传 SARIF。
+- **跨平台契约用例 4 条**（`tests/test_common.py::TestCrossPlatform`）：路径归一、`load_skill` 无反斜杠、
+  子进程环境变量、stdout 能直接写中文。测试 64 → **68 项**。
+- `selftest.py` 摘要打印平台与 Python 版本，CI 日志里一眼定位是哪个平台挂的。
+
+### 文档
+
+- README / SKILL.md 标注「跨平台：三平台 CI 验证」；FAQ 新增 Q20（Windows 支持与三个已知差异）。
+
+## v1.10.0 — 2026-10-23
+
+**把 v1.9.0 自曝的四个短板补掉：批量并行、同义改写、跨文件外发、跨平台路径**
+
+> 这四项都来自 v1.9.0 结尾的"诚实清单"，本轮逐条落地，没有新增"预留但未实现"的东西。
+
+### 新增
+
+- **`batch_audit.py`：批量并行审计 + 汇总看板**（第 11 个脚本）
+  - `--root DIR` 递归发现含 `SKILL.md` 的技能（命中即停，不把技能里内嵌的示例算成两个目标），
+    `--jobs` 并行（默认 CPU 核数、上限 8），实测 86 个技能 / 4 并行约 35 秒。
+  - 看板三块：**总览表**（按 TRACE 从低到高）、**共性问题**（同一条规则命中几个技能 = 系统性短板）、
+    **待修清单**（high/medium，带文件行号）。
+  - **只读**：不创建 `.skill-audit/`、不改任何文件——批量扫别人托管的目录时这点很关键。
+  - 门禁：`--fail-on` / `--fail-under`（要求**每个**技能达标），退出码 2，与步骤失败（1）区分。
+- **SEM-006 同义改写重复**：SEM-001 只看字面，作者一换同义词（校验→检查）就漏。新增**概念归一表**
+  （8 组通用词表，`config.synonyms` 可合并扩充），归一后重算相似度；三道精度闸门：必须真换过词、
+  极性一致（必须 vs 禁止归 SEM-004）、已由 SEM-001 报过的不重报。证据里带出换词对，一眼能判断真假。
+- **SEC-008 跨文件读+发组合**：读在 A 文件、发在 B 文件，是绕开 SEC-002 同文件判定的常见手法。
+  两侧都要求**动作级证据**：一侧是把私钥/凭据喂给命令的读取动作，另一侧是带数据体或上传选项的发送动作；
+  只报 medium，不追数据流。规则样例见 `references/security-rules.md`（该文件整体豁免，可如实写出模式）。
+- **STRUCT-019 覆盖 Windows**：新增盘符（`C:` 后接反斜杠或正斜杠）与 UNC（`\\host\share`）形态；
+  盘符前加负向断言，`https://` 不会被误判成盘。
+
+### 修复
+
+- **`config.synonyms` 的配置陷阱**（自测中发现）：原实现是"整块替换内置词表"，用户在配置里只写一组，
+  等于悄悄关掉其余七组检查。改为**同名键覆盖、新键新增**，并忽略 `_` 开头注释键与非列表值。
+- **`batch_audit.py` 的告警污染 JSON**：路径告警原走 stdout，`--json` 时输出不合法；已改走 stderr。
+
+### 文档
+
+- SKILL.md 新增「批量审计（一次扫完多个 Skill）」章节 + 目录项；能力边界补 ⑤⑥ 两条诚实边界；
+  Q15 从"自己写 for 循环"改为指向 `batch_audit.py`；新增 Q19（同义改写怎么判断）。
+- FAQ 新增 Q18（批量）与 Q19（同义改写边界）；`references/prompt-semantic-analysis.md` 新增第 6 节；
+  `references/security-rules.md` 新增 SEC-008 并重写跨文件边界说明；
+  `references/audit-rules.md` 补 SEM-006 与 STRUCT-019 跨平台口径；示例配置补 `synonyms`。
+- 测试 50 → **64 项**（SEC-008 三例、STRUCT-019 跨平台两例、SEM-006 四例、批量端到端四例、
+  配置合并一例）。
+
+## v1.9.0 — 2026-10-23
+
+**对齐开源生态的先进做法：OWASP Agentic Skills 安全规则族 + 规范合规校验 + SARIF/CI 门禁 + 自带测试套件**
+
+> 参考了 OWASP Agentic Skills Top 10（AST01–AST10）与其 Skill Security Assessment Checklist、
+> agentskills.io 规范与主流 marketplace 的两层校验口径、以及开源 skill 扫描器（SX-CMD/SX-EXF/SX-INJ 等）
+> 的规则切分方式。落地的都是能在本机复现的检查项，没有"预留但未实现"的东西。
+
+### 新增能力
+
+- **安全扫描 `security_analyzer.py`（Phase 1.5）**：SEC-001~007 七类模式，**代码层与正文指令层都读**——
+  这是 Skill 特有的攻击面（payload 藏在 markdown 散文里），普通密钥扫描器看不到。每条带 OWASP AST 编号：
+  危险命令(AST01)、敏感读取+外发(AST01)、越权/隐蔽指令(AST05)、过度授权(AST03)、硬编码凭据(AST04，证据脱敏)、
+  写身份/记忆文件(AST01+03)、隐藏 Unicode(AST05)。规则详情见 `references/security-rules.md`。
+- **两套防误报机制**：① 教材/反模式语境自动降一级并标注；② 行级/文件级抑制标记
+  （`skill-inspector: ignore SEC-001` / `ignore-file SEC-001,SEC-002`），豁免写在代码里可被 review，
+  而不是偷偷关规则。
+- **规范合规规则 STRUCT-015~019**：name 格式（1–64、kebab-case）、name 与目录名一致、
+  description 长度（>1024 / <20）、正文行数卫生（>500 建议拆分）、机器绝对路径（`/Users/…`、`/home/…`）。
+- **EFF-005 孤立资源**：`references/`、`assets/` 里存在但正文从未引用的文件——渐进式披露的另一半。
+- **SARIF 2.1.0 输出**：`audit_skill.py --format sarif`，可接 GitHub Security 面板与任意 CI 聚合器。
+- **CI 门禁**：`run_all.py --fail-on low|medium|high --fail-under 80`；命中退出码 `2`，脚本自身出错 `1`。
+- **自带测试套件**：`tests/`（50 项，stdlib unittest）+ `scripts/selftest.py` + `.github/workflows/ci.yml`
+  （3 个 Python 版本矩阵）。用例刻意做成"真阳性 + 假阳性回归"双向断言——因为这个工具最容易错的地方就是误报。
+
+### 修复
+
+- **`parse_frontmatter` 不剥离 YAML 引号**（真 bug）：`name: 'x'` 会把引号一起返回，连带污染
+  description 长度、第一/第二人称、绝对化词等判断。现统一剥成对引号。
+- **T3 夸大检测加固**：两次误报的根因都是"引用别人的话"被当成自己的承诺。现在引号内示例（「」“”""）、
+  教材/禁止语境行、技术术语（绝对路径/绝对化承诺）三类均豁免，另有 6 条回归用例锁死行为。
+- **`run_all.py --json` 退出码不反映失败**：原先无论步骤是否失败都退出 0，现在按失败/门禁分别返回 1/2。
+
+### 文档
+
+- 报告模板新增第 4 节「安全审查（OWASP Agentic Skills）」，章节重编号为 1–7。
+- `references/audit-rules.md` 补齐新规则；新增 `references/security-rules.md`（规则表 + AST 映射 + 抑制语法 + 诚实边界）。
+- SKILL.md 增加 Phase 1.5、触发词「安全」场景、Q17/Q18；FAQ 增加 Q15/Q16；README 更新目录树与 CI 用法。
+
+## v1.8.2 — 2026-10-23
+
+**改名以通过平台唯一性校验：`skill-auditor` → `skill-inspector`**
+
+> WorkBuddy 技能导入返回「解析失败：技能名称 "skill-auditor" 已被占用」。名称是全局唯一的，因此改注册名；功能、规则集、评分口径一概未动。
+
+- `SKILL.md` 的 `name` 改为 `skill-inspector`；`display_name`（技能审查官）/ `display_name_en`（Skill Auditor）不变，展示层无感知。
+- 正文与脚本里 60 处自称同步改名（SKILL.md / README / FAQ / COOKBOOK / 报告模板 / 4 个脚本的提示文案），避免"名称与文档不一致"被评测判为规范性问题。CHANGELOG 历史条目保留原名，不改写历史。
+- 仓库名与历史发行包仍沿用 `skill-auditor`，属发布渠道差异，不影响导入。
+
+## v1.8.1 — 2026-10-23
+
+**新增 WorkBuddy 上传入口所需的 4 个 frontmatter 字段 + 修 T3 一处误报**
+
+> 本轮不改能力，只为「能作为 WorkBuddy 技能包被导入」补齐元数据；顺带被自测暴露一个真实误报。
+
+- **frontmatter 补齐 WorkBuddy 技能入口必填 4 项**：`display_name`（技能审查官）、`display_name_en`（Skill Auditor）、`description_zh`、`description_en`。缺失时平台导入报「缺少 Skill 中文展示名」等四条错误；原有 `name` / `version` / `description` / `agent_created` 保持不变。
+- **修 `trace_eval.py` T3 误报**：夸大词表里的裸 `绝对` 会命中 `绝对化承诺`（描述反模式本身的名词），导致自审 T 维从 100 掉到 80。现与 `绝对路径`/`绝对定位` 一并纳入技术语境豁免。
+- **SKILL.md 反模式表第 8 行**把示例串改为行内代码（`100% 准确`、`永远不会错`），既是规范写法，也让 T3 的代码豁免正常生效。
+- 自测：`run_all.py` 全流程通过，TRACE 100.0 / A，静态 5/5，17 条用例全部执行。
+
 ## v1.8.0 — 2026-08-05
 
 **按 SkillHub 评测报告（4.6/5）修复"文档/话术与实现错位" + 一键入口**

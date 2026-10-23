@@ -55,11 +55,34 @@
 2. 对正文每个二级标题段落做关键词覆盖度打分。
 3. 覆盖度 < `thresholds.drift_threshold`（默认 0.2）且段落较长的，标记"疑似漂移"，供人工判断。
 
+## 6. 同义改写重复检测（SEM-006）
+
+**目标**：抓"用词不同、意思一样"的重复。SEM-001 只看字面，一旦作者换了同义词
+（校验→检查、生成→产出），字面相似度就掉到阈值以下而漏报。
+
+**方法**（确定性，无模型）：
+1. **概念归一**：用 `config.synonyms`（默认 8 组通用词表）把同义说法替换为统一记号
+   （`校验/检查/验证` → `CHECK`），长变体优先替换，避免"删掉"被"删除"截断。
+2. 对归一后的句子重算词袋 Jaccard；≥ `thresholds.paraphrase_jaccard`（默认 0.55）进入候选。
+3. **三道精度闸门**（缺一不报）：
+   - 两句之间**确实发生过换词**（`_substitutions` 返回非空）；
+   - 两句**极性一致**——"必须…"与"禁止…"归 SEM-004 冲突，不按重复报；
+   - 字面相似度低于 `dup_sentence_jaccard`——已由 SEM-001 报过的不重复报。
+4. 证据里带出换词对：`换词: 校验≈检查、生成≈产出`，方便人一眼判断是否真重复。
+
+**能力边界（重要）**：只覆盖**术语替换型**改写。换句型、换语序、换叙述视角
+（"先校验再提交" vs "提交前需要校验"）抓不到——那需要 embedding 模型。本 Skill
+为零依赖工具，刻意不引入模型调用；需要更强语义判定时，用 `--model-config` 走模型测试那条路。
+
+**为什么不用编辑距离**：编辑距离对中文改写不敏感（换一个词就变得很远），
+而同义词表是**可审计**的——评测者能看到"为什么这两句被判为同义"。
+
 ## 阈值（config.thresholds 默认）
 
 ```json
 {
   "dup_sentence_jaccard": 0.6,
+  "paraphrase_jaccard": 0.55,
   "repeat_phrase_min_count": 4,
   "drift_threshold": 0.2,
   "min_sentence_len": 8
@@ -74,7 +97,10 @@
     {"rule_id":"SEM-001","severity":"medium","location":"SKILL.md:120",
      "evidence":"句A 与 句B 相似度 0.72","recommendation":"合并为一条"},
     {"rule_id":"SEM-003","severity":"medium","location":"SKILL.md:55,89",
-     "evidence":"'Skill' 与 '技能' 混用","recommendation":"统一为'技能'"}
+     "evidence":"'Skill' 与 '技能' 混用","recommendation":"统一为'技能'"},
+    {"rule_id":"SEM-006","severity":"medium","location":"SKILL.md",
+     "evidence":"同义改写疑似重复(归一相似度 1.00，换词: 校验≈检查): '生成报告之前先校验…' ≈ '产出报告之前先检查…'",
+     "recommendation":"保留一条即可"}
   ],
   "term_unify_suggestions": {"Skill":"技能"}
 }
@@ -86,3 +112,4 @@
 - SEM-003 → `OPT-TERM-UNIFY`（safe，术语归一）
 - SEM-004 → `OPT-REWRITE-CONFLICT`（aggressive，重写冲突）
 - SEM-005 → 仅报告，不自动改写（避免误删有意为之的内容）
+- SEM-006 → 仅报告，不自动改写（同义改写删哪条要看语境，机器不该替人决定）

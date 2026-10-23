@@ -1,13 +1,34 @@
 {
   "_comment": "复制为 <target>/.skill-audit/config.json 并按需修改。所有字段均可省略，省略时取脚本内置默认值。",
   "rules": {
-    "STRUCT-001": {"enabled": true, "severity": "high"},
-    "STRUCT-007": {"enabled": true, "severity": "high"},
-    "STRUCT-008": {"enabled": true, "severity": "high"},
-    "PROMPT-005": {"enabled": true, "severity": "high"},
-    "SEM-004":    {"enabled": true, "severity": "high"},
-    "EFF-001":    {"enabled": true, "severity": "medium"},
-    "SEM-003":    {"enabled": true, "severity": "medium"}
+    "STRUCT-001": {
+      "enabled": true,
+      "severity": "high"
+    },
+    "STRUCT-007": {
+      "enabled": true,
+      "severity": "high"
+    },
+    "STRUCT-008": {
+      "enabled": true,
+      "severity": "high"
+    },
+    "PROMPT-005": {
+      "enabled": true,
+      "severity": "high"
+    },
+    "SEM-004": {
+      "enabled": true,
+      "severity": "high"
+    },
+    "EFF-001": {
+      "enabled": true,
+      "severity": "medium"
+    },
+    "SEM-003": {
+      "enabled": true,
+      "severity": "medium"
+    }
   },
   "weights": {
     "T": 0.22,
@@ -17,13 +38,34 @@
     "E": 0.18
   },
   "strategies": {
-    "OPT-FRONTMATTER":      {"enabled": true,  "risk": "safe"},
-    "OPT-DEDUP-BLOCK":      {"enabled": true,  "risk": "safe"},
-    "OPT-TERM-UNIFY":       {"enabled": true,  "risk": "safe"},
-    "OPT-DEADREF-FIX":      {"enabled": true,  "risk": "safe"},
-    "OPT-PHRASE-NORMALIZE": {"enabled": true,  "risk": "safe"},
-    "OPT-REWRITE-CONFLICT": {"enabled": true,  "risk": "aggressive"},
-    "OPT-RESTRUCTURE":      {"enabled": false, "risk": "aggressive"},
+    "OPT-FRONTMATTER": {
+      "enabled": true,
+      "risk": "safe"
+    },
+    "OPT-DEDUP-BLOCK": {
+      "enabled": true,
+      "risk": "safe"
+    },
+    "OPT-TERM-UNIFY": {
+      "enabled": true,
+      "risk": "safe"
+    },
+    "OPT-DEADREF-FIX": {
+      "enabled": true,
+      "risk": "safe"
+    },
+    "OPT-PHRASE-NORMALIZE": {
+      "enabled": true,
+      "risk": "safe"
+    },
+    "OPT-REWRITE-CONFLICT": {
+      "enabled": true,
+      "risk": "aggressive"
+    },
+    "OPT-RESTRUCTURE": {
+      "enabled": false,
+      "risk": "aggressive"
+    },
     "allow_aggressive": false
   },
   "thresholds": {
@@ -31,11 +73,26 @@
     "repeat_phrase_min_count": 4,
     "drift_threshold": 0.2,
     "min_sentence_len": 8,
-    "max_skill_words": 5000
+    "max_skill_words": 5000,
+    "paraphrase_jaccard": 0.55
   },
   "term_clusters": {
     "_comment": "可选。覆盖默认同义术语簇；默认仅含跨框架通用写法。加入产品专属簇示例（按需启用）：MyTool -> [MyTool, mytool, 助手]",
-    "MyTool": ["MyTool", "mytool", "助手"]
+    "MyTool": [
+      "MyTool",
+      "mytool",
+      "助手"
+    ]
+  },
+  "synonyms": {
+    "_comment": "可选。同义改写检测（SEM-006）的概念归一表。**与内置 8 组词表合并**：同名键覆盖、新键新增，不会把内置组删掉；`_` 开头的键忽略。",
+    "CHECK": [
+      "校验",
+      "检查",
+      "验证",
+      "核查",
+      "核对"
+    ]
   },
   "_extensibility": {
     "custom_rules_module": "/abs/path/custom_rules.py",

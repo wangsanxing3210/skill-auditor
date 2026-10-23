@@ -1,12 +1,51 @@
-"""Shared helpers for the skill-auditor meta-skill scripts.
+"""Shared helpers for the skill-inspector meta-skill scripts.
 
-Stdlib only. Provides skill loading, frontmatter parsing, config reading, and a
-uniform Finding structure so every analyzer emits consistent JSON.
+Stdlib only. Provides skill loading, frontmatter parsing, config reading,
+cross-platform stdio/encoding helpers, and a uniform Finding structure so every
+analyzer emits consistent JSON.
 """
 import os
 import sys
 import json
 import re
+
+IS_WINDOWS = os.name == "nt"
+
+
+def ensure_utf8_stdio():
+    """把 stdout/stderr 固定为 UTF-8（Windows 兼容的关键一步）。
+
+    为什么需要：Windows 上 Python 默认按本地代码页（cp936 / cp1252）写标准输出，
+    报告里的中文会直接抛 UnicodeEncodeError，整个工具在 Windows 上"能跑但会崩"。
+    被重定向到文件或管道时（CI 日志），固定 UTF-8 也保证字节跨平台一致。
+    控制台流本身走 WindowsConsoleIO（UTF-8 通道），重设无副作用。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+def child_env():
+    """子进程环境变量：强制 UTF-8，避免 Windows 下中文输出乱码或解码失败。"""
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def posix_rel(path, start):
+    """相对路径统一用 `/` 分隔。
+
+    报告里的文件位置、`references/` 链接检查、`.skill-audit/` 排除都按 `/` 写；
+    Windows 的 `os.path.relpath` 会给反斜杠，若不归一，这些匹配会静默失效。
+    """
+    return os.path.relpath(path, start).replace(os.sep, "/")
+
+
+# 导入即生效：所有脚本都从这里进来，一处修好全部脚本受益。
+ensure_utf8_stdio()
 
 # Resource guards: keep the tool responsive on oversized skills.
 MAX_SKILL_BYTES = 512 * 1024          # ~512 KB SKILL.md soft cap
@@ -20,6 +59,7 @@ DEFAULT_CONFIG = {
     "strategies": {"allow_aggressive": False},
     "thresholds": {
         "dup_sentence_jaccard": 0.6,
+        "paraphrase_jaccard": 0.55,
         "repeat_phrase_min_count": 4,
         "drift_threshold": 0.2,
         "min_sentence_len": 8,
@@ -36,7 +76,7 @@ class GuardError(Exception):
         self.next_step = next_step
 
 
-def humanize_error(exc, tool_name="skill-auditor"):
+def humanize_error(exc, tool_name="skill-inspector"):
     """Convert common exceptions into plain-language messages + next steps.
 
     The returned message is aimed at end users who may not be technical. The
@@ -68,7 +108,7 @@ def humanize_error(exc, tool_name="skill-auditor"):
     if isinstance(exc, UnicodeDecodeError):
         return (
             "E_ENCODING",
-            "文件编码识别不了。skill-auditor 只认 UTF-8 编码的文本。",
+            "文件编码识别不了。skill-inspector 只认 UTF-8 编码的文本。",
             "用编辑器把 SKILL.md / 配置文件另存为'UTF-8 无 BOM'后再试一次。",
         )
     if isinstance(exc, MemoryError):
@@ -102,7 +142,7 @@ def safe_read_text(path, label="文件"):
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
     except UnicodeDecodeError as e:
-        raise GuardError("E_ENCODING", "%s 编码识别不了。skill-auditor 只认 UTF-8 编码的文本。" % label,
+        raise GuardError("E_ENCODING", "%s 编码识别不了。skill-inspector 只认 UTF-8 编码的文本。" % label,
                          "用编辑器把文件另存为'UTF-8 无 BOM'后再试一次。") from e
     except OSError as e:
         raise GuardError("E_READ", "%s 读取出错了：%s" % (label, e),
@@ -115,6 +155,17 @@ def find_skill_md(target):
         return target
     cand = os.path.join(target, "SKILL.md")
     return cand if os.path.isfile(cand) else None
+
+
+def _strip_yaml_quotes(val):
+    """去掉 YAML 标量两侧的成对引号（'x' / "x"），保留内部引号。
+
+    早期版本把引号一起返回，导致 description 长度、第一/第二人称、
+    绝对化词等后续判断都带着引号噪声——属真实缺陷，故在此统一处理。
+    """
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+        return val[1:-1]
+    return val
 
 
 def parse_frontmatter(text):
@@ -132,8 +183,8 @@ def parse_frontmatter(text):
         if ":" in line:
             key, val = line.split(":", 1)
             key = key.strip()
-            val = val.strip()
-            if val.lower() in ("true", "false"):
+            val = _strip_yaml_quotes(val.strip())
+            if isinstance(val, str) and val.lower() in ("true", "false"):
                 val = val.lower() == "true"
             fm[key] = val
     if end is None:
@@ -162,7 +213,7 @@ def load_skill(target):
     for root, _, fnames in os.walk(skill_dir):
         for fn in fnames:
             full = os.path.join(root, fn)
-            files.append(os.path.relpath(full, skill_dir))
+            files.append(posix_rel(full, skill_dir))
     return {
         "dir": skill_dir,
         "skill_md": path,
@@ -256,6 +307,24 @@ def strip_code_fences(text):
     text = re.sub(r"```.*?```", " ", text, flags=re.S)
     # inline code
     text = re.sub(r"`[^`]+`", " ", text)
+    return text
+
+
+def strip_quoted_examples(text):
+    """Remove text inside quotation marks (中文/英文引号) — a claim that appears
+    quoted is a citation/example, not the skill's own promise.
+
+    Used by keyword checks such as T3 so that prose like 反模式「保证 100% 正确」
+    does not count as an exaggeration made by the skill itself.
+    """
+    if not text:
+        return ""
+    text = re.sub(r"「[^」\n]{0,200}」", " ", text)
+    text = re.sub(r"『[^』\n]{0,200}』", " ", text)
+    text = re.sub(r"“[^”\n]{0,200}”", " ", text)
+    text = re.sub(r"‘[^’\n]{0,200}’", " ", text)
+    text = re.sub(r'"[^"\n]{0,200}"', " ", text)
+    text = re.sub(r"'[^'\n]{0,200}'", " ", text)
     return text
 
 

@@ -1,15 +1,21 @@
 ---
-name: skill-auditor
-version: 1.8.0
-description: '用于审查、评测、测试、优化其他任何 Skill 的元技能（meta-skill），不限定具体工具框架，适用于 WorkBuddy、OpenClaw 等所有基于 SKILL.md 的 Skill。当用户需要审查/评测/优化某个 SKILL.md、评估技能质量、查找冗余或不一致的提示词、测试技能的边界情况、运行 TRACE 五维评测，或生成技能改动的前后对比报告时使用。触发方式包括：「审查这个 Skill」「优化 SKILL.md」「给这个 Skill 做个 TRACE 评测」「测一下这个技能的边界情况」「Skill 提示词冗余检测」「对比优化前后」「帮我看看这个 skill 写得怎么样」等。'
+name: skill-inspector
+version: 1.10.1
+display_name: '技能审查官'
+display_name_en: 'Skill Auditor'
+description_zh: '审查、评测、测试并优化任意 SKILL.md，输出 TRACE 五维评分与可执行的改进报告。'
+description_en: 'Audits, evaluates, tests and optimizes any SKILL.md skill; outputs TRACE five-dimension scores and an actionable improvement report.'
+description: '用于审查、评测、测试、优化其他任何 Skill 的元技能（meta-skill），不限定具体工具框架，适用于 WorkBuddy、OpenClaw 等所有基于 SKILL.md 的 Skill。当用户需要审查/评测/优化某个 SKILL.md、评估技能质量、查找冗余或不一致的提示词、测试技能的边界情况、运行 TRACE 五维评测，或生成技能改动的前后对比报告时使用。触发方式包括：「审查这个 Skill」「优化 SKILL.md」「给这个 Skill 做个 TRACE 评测」「测一下这个技能的边界情况」「Skill 提示词冗余检测」「对比优化前后」「帮我看看这个 skill 写得怎么样」「扫一下这个 Skill 有没有安全问题」「上架前安全检查」「会不会偷偷外发数据」「把所有 skills 都审一遍，哪个最差」等。'
 agent_created: true
 ---
 
 # Skill Auditor（元 Skill：审查 · 评测 · 优化）
 
 > **纯本地 · 零网络依赖 · 零配置 · 全中文界面 · 下载即用**
-> 审计 / 评测 / 测试 / 优化全部在本机完成，不上传你的 Skill 内容，不访问外网；审查、语义分析、TRACE 评分、静态测试无需任何模型或网络配置；只有"模型输出测试"是可选且完全可跳过的高级配置。
-> 一条命令拿到完整报告：`python3 scripts/run_all.py <skill_dir>` 自动跑完 审计 → 语义 → TRACE → 测试 → 报告，生成 `.skill-audit/REPORT.md`。
+> 审计 / 评测 / 测试 / 优化全部在本机完成，不上传你的 Skill 内容，不访问外网；审查、安全扫描、语义分析、TRACE 评分、静态测试无需任何模型或网络配置；只有"模型输出测试"是可选且完全可跳过的高级配置。
+> 一条命令拿到完整报告：`python3 scripts/run_all.py <skill_dir>` 自动跑完 审计 → 语义 → 安全 → TRACE → 测试 → 报告，生成 `.skill-audit/REPORT.md`。
+> 一堆 Skill 一起审：`python3 scripts/batch_audit.py --root <技能父目录>` 并行跑完并出 `BATCH-AUDIT.md` 看板（只读扫描，不在目标目录留任何产物）。
+> 安全扫描对标 **OWASP Agentic Skills Top 10**（SEC-001~008，覆盖代码层与正文指令层）；自带 **68 项单元 / 端到端测试**（`python3 scripts/selftest.py`），可复现、可 CI；**macOS / Linux / Windows 三平台各有 CI 矩阵**跑同一份用例，跨平台不是口头承诺。
 > 本 Skill 引用的 `references/`、`assets/` 均为自带文件，离线可读，不依赖任何外部链接。
 
 ## Overview
@@ -29,19 +35,21 @@ agent_created: true
 | 审查 | "审查一下 ~/.workbuddy/skills/foo" / "帮我看看这个 Skill 写得怎么样" | 工具型、教学型 Skill 作者（发布前自查） | Phase 0–1 |
 | 评测 | "给这个 Skill 做个 TRACE 评测" / "评一下质量" / "看看能得几分" | 要上架应用市场的作者（品牌/文案/知识型 Skill 也适用） | Phase 2 |
 | 测试 | "测一下这个技能的边界情况" / "空输入/大文件会怎样" / "会不会崩" | 面向真实用户的工具型 Skill（可靠性优先） | Phase 3 |
+| 安全 | "扫一下这个 Skill 有没有安全问题" / "会不会偷偷外发数据" / "上架前安全检查" | 要上架/安装别人 Skill 的人（供应链风险） | Phase 1.5 |
 | 优化（预览） | "把提示词里重复的地方合并一下，先给我看看" / "我想优化但别直接改" | 任何想改但怕改坏的作者 | Phase 4 dry-run |
 | 优化（落盘） | "确认优化" / "就按这个改" / "apply" | 看过预览、确认无误后 | Phase 4 apply |
 | 报告 | "对比优化前后改了什么" / "给我一份 REPORT.md" | 需要给团队/客户交付审查结论的人 | Phase 5 |
-| 自动化 / 批量 | "把所有 skills 都审一遍" / CI 里想直接调用 | 维护多个 Skill 的团队负责人、流水线脚本 | 全流程（`run_all.py <skill>` 一条命令） |
+| 自动化 / 批量 | "把所有 skills 都审一遍" / "哪个技能最差" / CI 里想直接调用 | 维护多个 Skill 的团队负责人、流水线脚本 | 批量看板（`batch_audit.py`）或单技能全流程（`run_all.py`） |
 
-> **不知道怎么开口？** 从这三个字开始：**「审」**（审查这个 skill）、**「修」**（帮我优化）、**「比」**（对比优化前后）。说完 skill-auditor 会追问路径和细节，你只需要回答。
-> 提示：不需要记特殊命令，用自然语言描述意图即可；skill-auditor 会先澄清模糊点再动手（参见「能力边界与异常处理 → 澄清问卷」）。
+> **不知道怎么开口？** 从这三个字开始：**「审」**（审查这个 skill）、**「修」**（帮我优化）、**「比」**（对比优化前后）。说完 skill-inspector 会追问路径和细节，你只需要回答。
+> 提示：不需要记特殊命令，用自然语言描述意图即可；skill-inspector 会先澄清模糊点再动手（参见「能力边界与异常处理 → 澄清问卷」）。
 
 ## 目录
 
 - [Overview](#overview)
 - [触发词速查卡（场景 → 说法 → 执行阶段）](#触发词速查卡场景-说法-执行阶段)
 - [30 秒快速开始（端到端 3 步：一条命令拿到 REPORT.md）](#30-秒快速开始端到端-3-步一条命令拿到-reportmd)
+- [批量审计（一次扫完多个 Skill）](#批量审计一次扫完多个-skill)
 - [什么时候用（When To Use）](#什么时候用when-to-use)
 - [能力边界与异常处理](#能力边界与异常处理)
 - [设计原则（Design Principles）](#设计原则design-principles)
@@ -55,7 +63,7 @@ agent_created: true
 - [常见问题 FAQ](#常见问题-faq)
 - [反模式](#反模式)
 
-配套文档：`FAQ.md`（12 条问答 + 反模式表）、`COOKBOOK.md`（3 个完整场景 + 自然语言使用速查）。
+配套文档：`FAQ.md`（20 条问答 + 反模式表）、`COOKBOOK.md`（3 个完整场景 + 自然语言使用速查）。
 
 ## 30 秒快速开始（端到端 3 步：一条命令拿到 REPORT.md）
 
@@ -64,7 +72,7 @@ agent_created: true
 cd ~/.workbuddy/skills/foo
 
 # 2. 一条命令跑完 审计 → 语义 → TRACE → 测试 → 报告（无需任何配置）
-python3 ~/.workbuddy/skills/skill-auditor/scripts/run_all.py .
+python3 ~/.workbuddy/skills/skill-inspector/scripts/run_all.py .
 
 # 3. 查看报告（按严重度排序的发现 + TRACE 五维评分 + 测试结论 + 覆盖度）
 cat .skill-audit/REPORT.md
@@ -84,6 +92,34 @@ cat .skill-audit/REPORT.md
 
 > **新手推荐阅读路径**：`## 能力边界与异常处理` → `## 示例（Few-shot）` → 需要完整场景案例看 `COOKBOOK.md` → 遇到卡点查 `FAQ.md` → 自定义看 `## 配置`。
 
+## 批量审计（一次扫完多个 Skill）
+
+单个 Skill 用 `run_all.py`；**一堆** Skill 用 `batch_audit.py`。它会并行跑完 5 个分析脚本，
+输出一张看板，把"逐个修"变成"先看系统性短板"：
+
+```bash
+# 扫整个技能父目录（自动发现含 SKILL.md 的目录，最多下钻 3 层）
+python3 ~/.workbuddy/skills/skill-inspector/scripts/batch_audit.py --root ~/.workbuddy/skills
+
+# 只扫指定的几个，控制并行度与输出位置
+python3 scripts/batch_audit.py ~/skills/a ~/skills/b --jobs 4 --out ./BATCH-AUDIT.md
+
+# 当 CI 门禁用：任一技能有 high 发现、或任一技能 TRACE < 80，退出码 2
+python3 scripts/batch_audit.py --root ./skills --fail-on high --fail-under 80
+```
+
+看板包含三块：
+
+| 区块 | 用途 |
+|------|------|
+| 总览表 | 每个技能的 TRACE / 等级 / 高·中·低发现数 / 安全命中 / 静态通过 / 耗时，按分数从低到高排 |
+| 共性问题 | 同一条规则命中多个技能 = 系统性短板，改一次规范比逐个修省事 |
+| 待修清单 | 按严重度排序的具体条目，带文件与行号，直接照着改 |
+
+> **只读承诺**：批量模式不会在目标目录里创建 `.skill-audit/`，也不改任何文件；
+> 需要某个技能的完整报告时，再对它单独跑 `run_all.py`。
+> `--fail-on` 的口径比 `run_all` 更严格（把语义发现也算进去），这一点写在看板表头。
+
 ## 什么时候用（When To Use）
 
 - 发布前或收到反馈后，审查一个 Skill（"帮我看看这个 Skill 写得怎么样"）。
@@ -91,7 +127,8 @@ cat .skill-audit/REPORT.md
 - 为 Skill 库 / 应用市场提交跑一次 TRACE 评分卡。
 - 测试一个 Skill 的健壮性（"这个 Skill 在空输入 / 超大输入下会怎样"）。
 - 生成 Skill 改动的可对比前后报告（"对比优化前后改了什么"）。
-- 对自己的 Skill 做质量自检（用 skill-auditor 审 skill-auditor 自身）。
+- 一次审查整个 skills 目录，先找出最差的几个与共性问题（`batch_audit.py`）。
+- 对自己的 Skill 做质量自检（用 skill-inspector 审 skill-inspector 自身）。
 
 ## 能力边界与异常处理
 
@@ -101,7 +138,7 @@ cat .skill-audit/REPORT.md
 |------|------|----------|
 | 能做 | 审查 / 评测 / 测试 / 安全优化任何基于 `SKILL.md` 的 Skill（WorkBuddy、OpenClaw 等框架通用） | 直接执行 Phase 0–5 标准流程 |
 | 不做 | ①改写目标 Skill 的领域业务逻辑 ②处理二进制/非文本资源 ③保证某个评分或"一定通过" ④访问私有仓库或外发内容 | 明确告知不适用，不强行执行 |
-| 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 ④超大文件（>3 万词 / 3000 句）→ 全文浅扫兜底 + 重点段深扫，不丢失检查项，覆盖区间写入报告 | 优雅降级，不拒答但标注假设与边界 |
+| 降级做 | ①布局非标准（无 scripts/ 等约定目录）→ 仅审 SKILL.md 正文并标注缺失 ②脚本缺失 → 跳过对应检查并提示 ③未知框架 → 仍解析 `SKILL.md` 本体，按通用规则评测 ④超大文件（>3 万词 / 3000 句）→ 全文浅扫兜底 + 重点段深扫，不丢失检查项，覆盖区间写入报告 ⑤同义改写检测只认内置/配置的概念表（校验↔检查这类**术语替换**），自由改写（换句型换语序）抓不到，需 embedding 模型，本工具不引入模型依赖 ⑥跨文件外发（SEC-008）只做"读取动作 + 发送动作分处两个文件"的碰面判定，不追数据流 | 优雅降级，不拒答但标注假设与边界 |
 
 ### 异常处理（诊断 → 修复 话术库）
 
@@ -136,7 +173,8 @@ cat .skill-audit/REPORT.md
 
 ```
 Phase 0  定位与解析   → 确定目标 Skill 目录，读取 SKILL.md 与附带资源
-Phase 1  审计         → 结构 + 提示词质量 + 效率（audit_skill.py、semantic_analyzer.py）
+Phase 1  审计         → 结构 + 提示词质量 + 效率 + 语义（audit_skill.py、semantic_analyzer.py）
+Phase 1.5 安全扫描    → OWASP AST 8 类模式（security_analyzer.py）
 Phase 2  TRACE 评测   → 五维评分卡（trace_eval.py）
 Phase 3  自动化测试   → 静态完整性 + 边界/准确性用例（skill_tester.py）
 Phase 4  建议与优化   → 汇总发现、应用安全修复、输出 diff（optimize_apply.py）
@@ -159,9 +197,17 @@ python3 <skill_dir>/scripts/semantic_analyzer.py <target>/SKILL.md --json > <tar
 ```
 
 - `audit_skill.py` 覆盖**结构**（frontmatter 合法性、必填字段、资源引用能否解析、命名规范）、**提示词质量**（触发词清晰度、指令形式、示例覆盖、长度卫生）、**效率**（重复块、应外置的超长内联内容、死引用）。
-- `semantic_analyzer.py` 覆盖**提示词语义**：近义重复句、高频重复短语、术语不一致（同一概念不同写法）、冲突指令。详见 `references/prompt-semantic-analysis.md`。
+- `semantic_analyzer.py` 覆盖**提示词语义**：近义重复句（SEM-001）、同义改写重复（SEM-006，用概念归一表识别"校验↔检查"这类换词改写）、高频重复短语、术语不一致（同一概念不同写法）、冲突指令。详见 `references/prompt-semantic-analysis.md`。
 
 合并规则：并集合并；按 `(rule_id, location)` 去重。
+
+### Phase 1.5 — 安全扫描
+
+```bash
+python3 <skill_dir>/scripts/security_analyzer.py <target> --json > <target>/.skill-audit/security.json
+```
+
+按 **OWASP Agentic Skills Top 10** 切分的 8 类模式（SEC-001~008）：危险命令、敏感读取+外发、越权/隐蔽指令、过度授权、硬编码凭据（报告内脱敏）、写身份/记忆文件、隐藏 Unicode、跨文件读+发组合（读在 A 文件、发在 B 文件，绕开同文件判定）。**代码层与正文指令层都读**——这是 Skill 特有的攻击面，普通密钥扫描器看不到散文里的 payload。规则表、抑制标记（`skill-inspector: ignore SEC-001`）与误报边界见 `references/security-rules.md`。
 
 ### Phase 2 — TRACE 评测
 
@@ -264,7 +310,7 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
 
 ### 示例 4 · 多轮澄清（用户模糊 → 追问 → 执行）
 
-当你的需求信息不完整时，skill-auditor 会先问、再动手，而不是默认猜：
+当你的需求信息不完整时，skill-inspector 会先问、再动手，而不是默认猜：
 
 - **用户**："帮我看看这个 skill"（没说哪个 skill）
 - **技能**："可以。请告诉我 Skill 的目录路径（带 SKILL.md 的那个）——也可以直接说 ~/.workbuddy/skills/xxx 这样的相对路径。"
@@ -273,15 +319,15 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
 - **用户**："先预览，user scope"
 - **技能动作**：Phase 1 + Phase 4 dry-run；输出 diff 摘要等用户确认。
 
-### 示例 5 · 自审自优（skill-auditor 审计自身）
+### 示例 5 · 自审自优（skill-inspector 审计自身）
 
-- **用户输入**："skill-auditor 自己有没有隐藏 bug？"
+- **用户输入**："skill-inspector 自己有没有隐藏 bug？"
 - **技能动作**：对自身跑 Phase 0–5（标准自检流程）。
 - **关键产出**：本仓库 `.skill-audit/REPORT.md` 是一次自检实例，audit 仅报预期的 `STRUCT-014`（`.gitignore` 被宿主跳过），TRACE 仍 100.0 / A。
 - **如何复现**：
 
   ```bash
-  cd ~/.workbuddy/skills/skill-auditor
+  cd ~/.workbuddy/skills/skill-inspector
   python3 scripts/run_all.py .   # 一条命令拿到自审报告
   ```
 
@@ -293,7 +339,8 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
 - `rules`：按 `rule_id` 启用/禁用审计规则，设置每条规则的严重度阈值。
 - `weights`：覆盖 TRACE 各维度权重（必须归一化到 1.0）。
 - `strategies`：开关优化策略，以及是否允许 `--aggressive`。
-- `thresholds`：长度 / 重复 / 一致性的数值阈值。
+- `thresholds`：长度 / 重复 / 一致性的数值阈值，含 `dup_sentence_jaccard`（字面重复 0.6）与 `paraphrase_jaccard`（同义改写 0.55）。
+- `synonyms`：同义改写的**概念归一表**（`{"CHECK": ["校验","检查","验证"…]}`），可按团队术语扩充；不给就用内置的 8 组通用词表。
 
 对支持配置的脚本传 `--config <path>`（`audit_skill.py`、`trace_eval.py`、`optimize_apply.py`）。
 
@@ -314,6 +361,7 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
   config.json          # 生效配置
   audit.json           # Phase 1 结构/提示词/效率发现
   semantic.json        # Phase 1 语义发现
+  security.json        # Phase 1.5 安全发现（含 OWASP AST 编号）
   trace.json           # Phase 2 TRACE 评分卡
   testplan.json        # Phase 3 测试用例 + 结果
   findings.json        # 合并发现（Phase 4 输入）
@@ -321,30 +369,38 @@ python3 <skill_dir>/scripts/build_report.py <target> --out <target>/.skill-audit
   REPORT.md            # Phase 5 最终交付物
 ```
 
+批量模式（`batch_audit.py`）例外：它**不写** `.skill-audit/`，只在你用 `--out` 指定的位置（默认当前目录）生成一份 `BATCH-AUDIT.md` 汇总看板。
+
 ## 脚本速查（Scripts Reference）
 
 | 脚本 | 用途 | 关键参数 |
 |------|------|----------|
-| `run_all.py` | **一键全流程**：审计→语义→TRACE→测试→报告 | `<skill>`（推荐入口） |
-| `audit_skill.py` | 结构 / 提示词质量 / 效率审计 | `--json`, `--config` |
+| `run_all.py` | **一键全流程**：审计→语义→安全→TRACE→测试→报告 | `<skill>`（推荐入口）; CI 门禁 `--fail-on low\|medium\|high`、`--fail-under 80` |
+| `audit_skill.py` | 结构 / 提示词质量 / 效率审计 | `--json`, `--format json\|sarif`, `--config` |
 | `semantic_analyzer.py` | 冗余、术语、冲突检测 | `--json`, `--min-sentence-len` |
+| `batch_audit.py` | **批量并行审计 + 汇总看板**（只读，不写目标目录） | `--root DIR`（可多次）, `--depth`, `--jobs`, `--out`, `--fail-on`, `--fail-under` |
+| `security_analyzer.py` | 安全扫描（OWASP AST，SEC-001~008，含跨文件组合） | `--json`, `--config`（可逐条关规则） |
 | `trace_eval.py` | TRACE 五维评分 | `--json`, `--config`, `--prior trace.json` |
 | `skill_tester.py` | 静态完整性 + 用例生成 + 启发式判定 | `--plan-only`, `--run`, `--no-model`, `--model-config`, `--merge-results` |
 | `optimize_apply.py` | 安全优化 + diff + 报告 | `--dry-run`, `--aggressive`, `--out`, `--config` |
 | `build_report.py` | 从产物汇编 Phase 5 的 REPORT.md | `--out`, `--config` |
 | `diagnose.py` | 一键环境与 Skill 健康诊断 | （可带目标路径，`--json`） |
+| `selftest.py` | 跑本 Skill 自带测试套件（`tests/`，68 项） | `-k <关键字>` 只跑匹配用例 |
 
-所有脚本都是 Python 3.9+ 标准库实现。审计 / 语义 / TRACE / 静态测试阶段无需网络或外部依赖。
+所有脚本都是 Python 3.9+ 标准库实现。审计 / 语义 / 安全 / TRACE / 静态测试阶段无需网络或外部依赖。
+
+**接 CI 的两个开关**：`--fail-on high`（出现 high 级发现即失败）、`--fail-under 80`（TRACE 低于 80 即失败），触发时退出码为 `2`，与"脚本本身出错"的 `1` 区分开；`audit_skill.py --format sarif` 输出 SARIF 2.1.0，可直接喂 GitHub Security 面板。仓库内的 `.github/workflows/ci.yml` 是现成范例。
 
 ## References / Assets 引用
 
 | 任务 | 需要加载的 references | 需要使用的 assets |
 |------|---------------------|------------------|
-| 结构/提示词/效率审查 | audit-rules.md | config.example.json |
+| 结构/提示词/效率审查 | audit-rules.md | assets/config.example.json |
 | 提示词语义分析 | prompt-semantic-analysis.md | — |
+| 安全扫描（OWASP AST） | security-rules.md | — |
 | TRACE 五维评测 | trace-framework.md | — |
-| 安全自动优化 | optimization-strategies.md | report_template.md |
-| 自定义规则/策略/权重/术语簇 | （任意自定义模块） | config.example.json, model-config.example.json |
+| 安全自动优化 | optimization-strategies.md | assets/report_template.md |
+| 自定义规则/策略/权重/术语簇 | （任意自定义模块） | assets/config.example.json, assets/model-config.example.json |
 | 查常见问题/反模式 | FAQ.md | — |
 | 照案例执行 | COOKBOOK.md | — |
 
@@ -373,7 +429,7 @@ A：不会。审计/语义/TRACE/静态测试全部本地运行，无网络、�
 A：复制 `assets/config.example.json` 到 `<target>/.skill-audit/config.json` 即可，无需改代码；术语簇见 `config.term_clusters`。
 
 **Q7：能用来给 Skill 自己做质量自检吗？**
-A：能。对 skill-auditor 自身跑一遍 Phase 0–5 即是一次完整自检（本仓库 `.skill-audit/REPORT.md` 即实例）。
+A：能。对 skill-inspector 自身跑一遍 Phase 0–5 即是一次完整自检（本仓库 `.skill-audit/REPORT.md` 即实例）。
 
 **Q8：报错信息里出现了错误码（如 E_TOO_LARGE），该怎么办？**
 A：每个错误码都附带"下一步"建议。例如 `E_TOO_LARGE` 表示 SKILL.md 超过 512 KB，建议把细节移到 `references/`；`E_NO_SKILL_MD` 表示路径不对。按提示操作即可，无需翻源码。
@@ -385,36 +441,38 @@ A：不会。SKILL.md 超过 512 KB 时直接给出友好提示；正文超过 3
 A：不是必须的。静态完整性测试（引用是否存在、frontmatter 是否合法、代码围栏是否配对等）零配置即可跑；只有"把测试用例交给真实模型执行"这一步才需要 `--model-config`，且可以跳过。
 
 **Q11：语义分析报"疑似冲突指令"，但其实是正常说明，怎么办？**
-A：skill-auditor 对冲突指令加了"请人工复核"提示，不会直接改写。你可以在 `config.json` 里把 `SEM-004` 的 severity 调低或关闭，也可忽略该建议。
+A：skill-inspector 对冲突指令加了"请人工复核"提示，不会直接改写。你可以在 `config.json` 里把 `SEM-004` 的 severity 调低或关闭，也可忽略该建议。
 
 **Q12：想快速提升 TRACE 分数，应该先看哪个维度？**
 A：看总分最低的那个维度。通常优先级：R（可靠性，边界处理/错误说明）> T（安全可信）> E（有效性，描述与能力一致）> A（适用性，配置/扩展）> C（规范性，结构/示例）。具体修复清单见审计报告。
 
 **Q13：加载时提示「不支持的文件类型：.gitignore / LICENSE」怎么办？**
-A：这是 Skill 宿主跳过仓库元数据文件的正常提示，不影响 Skill 运行。`.gitignore` 建议保留；`LICENSE` 可改名为 `LICENSE.md` 以避免提示。skill-auditor 会标记为 `STRUCT-014`（low），不强制修复。详见 `FAQ.md` Q13。
+A：这是 Skill 宿主跳过仓库元数据文件的正常提示，不影响 Skill 运行。`.gitignore` 建议保留；`LICENSE` 可改名为 `LICENSE.md` 以避免提示。skill-inspector 会标记为 `STRUCT-014`（low），不强制修复。详见 `FAQ.md` Q13。
 
 **Q14：常见的反模式有哪些？**
 A：见下方「反模式」表（10 条 + 修复方向），以及 `FAQ.md` Q14 的"错误写法 vs 修复后"对照示例。
 
-**Q15：能不能一次性审多个 Skill？**
-A：可以。批量审查的最小脚本：
+**Q15：能不能一次性审多个 Skill？哪个最差？**
+A：用 `batch_audit.py`，并行跑并给一张看板，不用自己写循环：
 
 ```bash
-for d in ~/.workbuddy/skills/*/; do
-  [ -f "$d/SKILL.md" ] && python3 ~/.workbuddy/skills/skill-auditor/scripts/run_all.py "$d"
-done
-```
-每个 Skill 会在自己的 `.skill-audit/REPORT.md` 生成报告；汇总比较可用：
-
-```bash
-for d in ~/.workbuddy/skills/*/; do
-  [ -f "$d/.skill-audit/trace.json" ] && \
-    echo "$(basename $d): $(python3 -c "import json;print(json.load(open('$d/.skill-audit/trace.json'))['overall'])")"
-done
+python3 scripts/batch_audit.py --root ~/.workbuddy/skills --jobs 4
 ```
 
-**Q16：在哪能跟踪 skill-auditor 的版本变更？**
-A：`CHANGELOG.md` 记录每次发布的功能改动、bug 修复与已知局限；当前版本见 `SKILL.md` frontmatter 的 `version` 字段；同步镜像在 GitHub `wangsanxing3210/skill-auditor`。
+输出 `BATCH-AUDIT.md`：总览表（按 TRACE 从低到高排）、共性问题（同一条规则命中几个技能）、待修清单（带文件行号）。它**只读**，不会在目标目录里留 `.skill-audit/`；要某个技能的完整报告，再对它单独跑 `run_all.py`。
+
+**Q16：在哪能跟踪 skill-inspector 的版本变更？**
+A：`CHANGELOG.md` 记录每次发布的功能改动、bug 修复与已知局限；当前版本见 `SKILL.md` frontmatter 的 `version` 字段；同步镜像在 GitHub `wangsanxing3210/skill-inspector`。
+
+**Q17：安全扫描报了我自己的示例代码，怎么处理？**
+A：两种正规做法——① 该行是"反模式/示例"语境时，扫描器会自动降一级并标注「示例语境，请人工确认」，你看一眼即可；② 确实要长期豁免，就在该行或该文件里写抑制标记：`skill-inspector: ignore SEC-001`（行级）或 `skill-inspector: ignore-file SEC-001,SEC-002`（文件级）。不要把整条规则关掉——那会让同一类问题在别处也静默通过。
+
+**Q18：怎么把检查接进 CI？**
+A：用两个开关：`run_all.py . --fail-on high --fail-under 80`。出现 high 级发现或 TRACE 低于 80，进程退出码为 `2`（区别于脚本出错的 `1`），流水线据此拦截；需要给 GitHub Security 面板聚合时，再跑 `audit_skill.py . --format sarif > skill-audit.sarif` 并上传。仓库自带 `.github/workflows/ci.yml` 可直接抄。
+
+**Q19：语义分析说"同义改写疑似重复"，但我认为两句意思不同？**
+A：先看证据里的「换词: 校验≈检查」——它只在你**确实换了同义词**、且归一化后重叠 ≥ 0.55 时才报。三种处理：① 两句确实重复 → 删一条；② 侧重不同（一句讲条件、一句讲动作）→ 补上区分点；③ 风格化改写被你认可 → 在 `config.json` 提高 `thresholds.paraphrase_jaccard`，或删掉 `synonyms` 里对应的概念组。
+能力边界说清楚：它抓的是**术语替换型**改写，换句型、换语序（"先校验再提交"vs"提交前需要校验"）抓不到——那需要 embedding 模型，本工具刻意不引入模型依赖。
 
 ## 反模式
 
@@ -429,6 +487,6 @@ A：`CHANGELOG.md` 记录每次发布的功能改动、bug 修复与已知局限
 | 5 | 错误提示只有代码 | "E_TOO_LARGE" | R 低：非技术用户看不懂，也无下一步 | 用"原因 + 下一步"人话话术 | 本 Skill 的错误提示已升级为"原因 + 一键命令" |
 | 6 | 文档全是命令行 | 全文只有 ```bash 代码块 | A/C 低：普通用户没有命令行习惯 | 加对话式使用场景速查 | COOKBOOK「自然语言使用速查」表 |
 | 7 | 所有细节堆在正文 | SKILL.md 3000 行，references/ 为空 | C 低：渐进式披露失败，正文淹没读者 | 外置到 references/，正文只留流程 | 本 Skill 的 7 个脚本细节全部在 scripts/，正文只留用法 |
-| 8 | 含"100% 准确""永远不会错" | "保证 100% 正确" | T 低：绝对化承诺不可验证 | 改成可验证表述 | "同类技能中重复率 < 1%"这种可测量说法 |
-| 9 | 命令与脚本声明不一致 | 文档写 `--rules-only`，脚本没这参数 | R/C 低：照文档跑必报错 | 保持文档与代码一致（参考 STRUCT-013） | skill-auditor 曾自查出此类问题并修复 |
+| 8 | 含 `100% 准确`、`永远不会错` 这类绝对化承诺 | `保证 100% 正确` | T 低：绝对化承诺不可验证 | 改成可验证表述 | `同类技能中重复率 < 1%` 这种可测量说法 |
+| 9 | 命令与脚本声明不一致 | 文档写 `--rules-only`，脚本没这参数 | R/C 低：照文档跑必报错 | 保持文档与代码一致（参考 STRUCT-013） | skill-inspector 曾自查出此类问题并修复 |
 | 10 | 优化无备份无回退 | 直接覆盖原文件 | T/R 低：改坏了无法恢复 | 默认 dry-run + `.bak` 备份 + 统一 diff | 本 Skill 的优化流程：dry-run → 确认 → .bak + diff |

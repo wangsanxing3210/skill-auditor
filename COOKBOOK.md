@@ -1,12 +1,12 @@
-# skill-auditor 场景案例手册（Cookbook）
+# skill-inspector 场景案例手册（Cookbook）
 
-> 像菜谱一样可照着做的 3 个完整场景：审查一个臃肿 Skill、给 Skill 冲 TRACE 高分、安全地优化并对比前后。
+> 像菜谱一样可照着做的 4 个完整场景：审查一个臃肿 Skill、给 Skill 冲 TRACE 高分、安全地优化并对比前后、批量审一批技能。
 
 ---
 
 ## 自然语言使用速查（无需记命令）
 
-除了对 skill-auditor 说"审查这个 skill"，你也可以直接用下面这些日常说法：
+除了对 skill-inspector 说"审查这个 skill"，你也可以直接用下面这些日常说法：
 
 | 你想做什么 | 可以直接这样说 |
 |-----------|---------------|
@@ -15,9 +15,11 @@
 | 检查语义问题 | "看看这个 SKILL.md 有没有重复、冲突" |
 | 安全优化 | "帮我优化这个 skill" / "补全 frontmatter 和触发词" |
 | 生成最终报告 | "把审计结果汇总成 REPORT.md" |
+| 批量审一批技能 | "把所有 skills 都审一遍，哪个最差" |
+| 上架前安全检查 | "扫一下这个 Skill 有没有安全问题" |
 | 只看不动 | "先预览一下会改哪些地方" |
 
-> skill-auditor 会先进入审计阶段；如果你没指定路径，它会追问"要审哪个 Skill"。
+> skill-inspector 会先进入审计阶段；如果你没指定路径，它会追问"要审哪个 Skill"。
 
 ---
 
@@ -30,8 +32,8 @@
 ### 步骤
 
 ```bash
-# 1. 进入 skill-auditor 目录
-cd ~/.workbuddy/skills/skill-auditor
+# 1. 进入 skill-inspector 目录
+cd ~/.workbuddy/skills/skill-inspector
 
 # 2. 跑审计（只读，输出 JSON）
 python3 scripts/audit_skill.py /path/to/your/skill --json > /path/to/your/skill/.skill-audit/audit.json
@@ -106,7 +108,7 @@ python3 scripts/trace_eval.py /path/to/your/skill --json --prior /path/to/your/s
 
 ## 场景三：安全优化并对比前后
 
-**背景**：审查发现术语混用、frontmatter 缺字段、有连续重复文本，你想让 skill-auditor 自动修，但怕改坏。
+**背景**：审查发现术语混用、frontmatter 缺字段、有连续重复文本，你想让 skill-inspector 自动修，但怕改坏。
 
 **目标**：先预览，确认后再落盘，且保留回退能力。
 
@@ -117,9 +119,9 @@ python3 scripts/trace_eval.py /path/to/your/skill --json --prior /path/to/your/s
 cd /path/to/your/skill
 mkdir -p .skill-audit
 
-# 1. 生成 findings.json（这里手动合并示例；实际可用脚本或让 skill-auditor 自动合并）
-python3 ~/.workbuddy/skills/skill-auditor/scripts/audit_skill.py . --json > .skill-audit/audit.json
-python3 ~/.workbuddy/skills/skill-auditor/scripts/semantic_analyzer.py SKILL.md --json > .skill-audit/semantic.json
+# 1. 生成 findings.json（这里手动合并示例；实际可用脚本或让 skill-inspector 自动合并）
+python3 ~/.workbuddy/skills/skill-inspector/scripts/audit_skill.py . --json > .skill-audit/audit.json
+python3 ~/.workbuddy/skills/skill-inspector/scripts/semantic_analyzer.py SKILL.md --json > .skill-audit/semantic.json
 
 # 2. 合并（可用 jq 或 python）
 python3 - <<'PY'
@@ -132,11 +134,11 @@ with open('.skill-audit/findings.json', 'w') as f:
 PY
 
 # 3. dry-run 预览（不写盘）
-python3 ~/.workbuddy/skills/skill-auditor/scripts/optimize_apply.py . \
+python3 ~/.workbuddy/skills/skill-inspector/scripts/optimize_apply.py . \
   --findings .skill-audit/findings.json --dry-run
 
 # 4. 检查 diff 满意后，确认落盘
-python3 ~/.workbuddy/skills/skill-auditor/scripts/optimize_apply.py . \
+python3 ~/.workbuddy/skills/skill-inspector/scripts/optimize_apply.py . \
   --findings .skill-audit/findings.json \
   --out .skill-audit/optimization-report.md
 
@@ -158,13 +160,53 @@ cp SKILL.md.bak SKILL.md
 
 ---
 
+## 场景四：手上一堆 Skill，想知道哪个最差
+
+**适用**：维护 10 个以上 Skill 的人、要把技能库整体提质量的团队。
+**耗时**：一条命令，几十个技能也就半分钟到一分钟。
+
+### 步骤
+
+```bash
+cd ~/.workbuddy/skills/skill-inspector
+
+# 1. 并行扫整个父目录（自动发现含 SKILL.md 的目录，最多下钻 3 层）
+python3 scripts/batch_audit.py --root ~/.workbuddy/skills --jobs 4
+
+# 2. 打开看板
+open BATCH-AUDIT.md      # macOS；Linux 用 xdg-open
+```
+
+### 看板怎么读（三块，按这个顺序看）
+
+1. **共性问题**——同一条规则命中好几个技能，说明是写法习惯问题。
+   例如 `STRUCT-003`（缺"何时使用"）命中 5 个技能，那就统一补，而不是逐个纠结。
+2. **总览表**——按 TRACE 从低到高排，最差的在最上面。先挑 2–3 个最差的做深度优化。
+3. **待修清单**——high/medium 条目带文件与行号，照着改；改完重跑一次对比。
+
+### 和 run_all 的分工
+
+| 需求 | 用哪个 |
+|------|--------|
+| 看整体质量分布、找共性短板 | `batch_audit.py` |
+| 某个技能要完整体检报告（7 节 REPORT.md） | `run_all.py <该技能>` |
+| CI 里卡住不合格的技能 | `batch_audit.py --fail-on high --fail-under 80`（退出码 2） |
+
+### 两个坑
+
+- **批量模式是只读的**：它不会在目标目录建 `.skill-audit/`，所以你看不到单技能的 REPORT.md，这是有意的。
+- **门禁口径不同**：批量模式的 `--fail-on` 把语义发现（SEM-*）也算进去，比 `run_all` 严格；
+  `--fail-under` 要求**每个**技能都达标，不是看平均分。
+
+---
+
 ## 更多小技巧
 
 - **只想知道能不能改**：先跑 `--dry-run`，零风险。
 - **某个规则总误报**：在 `config.json` 里把该 `rule_id` 的 `enabled` 设成 `false`。
-- **要审多个 Skill**：写个 shell for 循环，批量跑 `run_all.py` 逐个生成报告。
+- **要审多个 Skill**：用 `batch_audit.py`（见场景四），别再自己写 for 循环——并行、只读、还给看板。
 - **要归档报告**：把 `.skill-audit/` 目录一起提交到版本控制，方便追踪质量变化。
-- **新手最省事**：直接 `python3 <skill-auditor>/scripts/run_all.py <目标Skill>`，一条命令出报告。
+- **新手最省事**：直接 `python3 <skill-inspector>/scripts/run_all.py <目标Skill>`，一条命令出报告。
 
 ---
 
@@ -173,7 +215,7 @@ cp SKILL.md.bak SKILL.md
 ### 发布前自检清单（5 步，5 分钟）
 
 ```bash
-cd ~/.workbuddy/skills/skill-auditor
+cd ~/.workbuddy/skills/skill-inspector
 python3 scripts/run_all.py ~/.workbuddy/skills/你的Skill   # ① 全流程报告
 python3 scripts/diagnose.py ~/.workbuddy/skills/你的Skill  # ② 环境/文件健康
 ```

@@ -42,6 +42,8 @@ def _py_version():
 def _check_runtime():
     rows = []
     ok = True
+    # platform: 报告里写清 OS，Windows 上的编码/分隔符问题排查全靠这一行
+    rows.append(("info", "平台 %s（%s）" % (sys.platform, "Windows" if C.IS_WINDOWS else "POSIX")))
     # python version
     v = sys.version_info
     ok_v = v.major == 3 and v.minor >= 9
@@ -131,7 +133,7 @@ def _check_target(path):
     files = []
     for root, _, fnames in os.walk(os.path.dirname(skill_md)):
         for fn in fnames:
-            files.append(os.path.relpath(os.path.join(root, fn), os.path.dirname(skill_md)))
+            files.append(C.posix_rel(os.path.join(root, fn), os.path.dirname(skill_md)))
     bad_dot = [f for f in files if os.path.basename(f) in DOTFILE_ISSUES]
     if bad_dot:
         rows.append(("warn", "包含宿主可能拒绝的 dotfile: %s（上传 SkillHub 前建议移出发行包）" % ", ".join(bad_dot)))
@@ -140,7 +142,8 @@ def _check_target(path):
         p = os.path.join(os.path.dirname(skill_md), cfg)
         if os.path.isfile(p):
             try:
-                json.load(open(p, encoding="utf-8"))
+                with open(p, encoding="utf-8") as f:
+                    json.load(f)
                 rows.append(("pass", "%s 是合法 JSON" % cfg))
             except Exception as e:
                 rows.append(("fail", "%s JSON 解析失败: %s" % (cfg, e)))

@@ -1,6 +1,6 @@
-# skill-auditor 常见问题汇总（FAQ）
+# skill-inspector 常见问题汇总（FAQ）
 
-> 本文档汇总使用 skill-auditor 时的常见疑问与反模式。若你在某个具体卡点停留，建议按 Ctrl+F / Cmd+F 搜索关键词。
+> 本文档汇总使用 skill-inspector 时的常见疑问与反模式。若你在某个具体卡点停留，建议按 Ctrl+F / Cmd+F 搜索关键词。
 
 ---
 
@@ -9,7 +9,7 @@
 | 你遇到的现象 | 先看哪一条 |
 |-------------|-----------|
 | 报错含 E_TOO_LARGE / E_NO_SKILL_MD / E_BAD_JSON | Q8、Q9 |
-| 不确定 skill-auditor 会不会改坏我的 Skill | Q1、Q4 |
+| 不确定 skill-inspector 会不会改坏我的 Skill | Q1、Q4 |
 | 超大 SKILL.md 处理慢 / 担心崩溃 | Q9 |
 | 跑测试被要求提供 `--model-config` | Q10 |
 | 语义分析误报冲突 / 术语不一致 | Q11 |
@@ -21,13 +21,13 @@
 
 ---
 
-## Q1：skill-auditor 会直接改我的 Skill 吗？
+## Q1：skill-inspector 会直接改我的 Skill 吗？
 
 **不会默认改写。**
 
 标准流程是：
 1. 出审计/TRACE/测试报告（只读）；
-2. 如果你想改，skill-auditor 先给 `--dry-run` 预览；
+2. 如果你想改，skill-inspector 先给 `--dry-run` 预览；
 3. 你确认后，才执行落盘，且会自动生成 `.bak` 备份和统一 diff。
 
 任何破坏性操作都必须经过「预览 → 确认」两步。
@@ -38,7 +38,7 @@
 
 任何基于 `SKILL.md` 文件头 + Markdown 正文的 Skill 规范，例如 WorkBuddy、OpenClaw 等。
 
-如果目标 Skill 没有标准 `scripts/` / `references/` / `assets/` 目录，skill-auditor 会**降级处理**：只审查 SKILL.md 本体，并标注缺失项，不会直接拒绝。
+如果目标 Skill 没有标准 `scripts/` / `references/` / `assets/` 目录，skill-inspector 会**降级处理**：只审查 SKILL.md 本体，并标注缺失项，不会直接拒绝。
 
 ---
 
@@ -56,7 +56,7 @@
 
 ## Q4：自动优化会不会改坏内容？
 
-skill-auditor 默认只应用低风险、可逆的改写（去重、frontmatter 补全、术语归一、弱化绝对化表述）。术语归一有三重保护：
+skill-inspector 默认只应用低风险、可逆的改写（去重、frontmatter 补全、术语归一、弱化绝对化表述）。术语归一有三重保护：
 
 - 不改动 Markdown 标题行；
 - 不改写英文句首/行首大写；
@@ -82,16 +82,16 @@ skill-auditor 默认只应用低风险、可逆的改写（去重、frontmatter 
 - `term_clusters`：加入你的产品/框架专属术语簇；
 - `custom_rules_module` / `custom_strategies_module`：接入自定义 Python 模块。
 
-无需修改 skill-auditor 源码。
+无需修改 skill-inspector 源码。
 
 ---
 
-## Q7：能给 skill-auditor 自己做自检吗？
+## Q7：能给 skill-inspector 自己做自检吗？
 
-可以。对 skill-auditor 自身跑一遍全流程就是一次完整自检，一条命令搞定：
+可以。对 skill-inspector 自身跑一遍全流程就是一次完整自检，一条命令搞定：
 
 ```bash
-cd ~/.workbuddy/skills/skill-auditor
+cd ~/.workbuddy/skills/skill-inspector
 python3 scripts/run_all.py .          # 自动跑 审计→语义→TRACE→测试→报告
 ```
 
@@ -101,7 +101,7 @@ python3 scripts/run_all.py .          # 自动跑 审计→语义→TRACE→测�
 
 ## Q8：报错出现 E_ 错误码是什么意思？
 
-skill-auditor 把所有常见失败映射成带解释的代码，避免抛出原始 traceback：
+skill-inspector 把所有常见失败映射成带解释的代码，避免抛出原始 traceback：
 
 | 错误码 | 含义 | 下一步 |
 |--------|------|--------|
@@ -144,7 +144,7 @@ skill_tester.py 分两层：
 
 ## Q11：语义分析误报怎么办？
 
-skill-auditor 对敏感项（冲突指令、术语不一致）加了置信度或"请人工复核"提示，不会自动强改。如果你认为某条是误报：
+skill-inspector 对敏感项（冲突指令、术语不一致）加了置信度或"请人工复核"提示，不会自动强改。如果你认为某条是误报：
 
 - 在 config.json 里调低该规则的 severity 或关闭它；
 - 对 `SEM-003` 术语不一致，可以自定义 `term_clusters` 把某组写法设为你认可的规范；
@@ -177,7 +177,7 @@ skill-auditor 对敏感项（冲突指令、术语不一致）加了置信度或
 - `.gitignore`：不能改名，建议保留（Git 需要它）；
 - `LICENSE`：可改名为 `LICENSE.md`（带扩展名后宿主通常不再跳过），README 中的引用也同步改为 `LICENSE.md`。
 
-skill-auditor 会把这类文件标记为 `STRUCT-014`（low 级别），仅作提示，不强制修复。
+skill-inspector 会把这类文件标记为 `STRUCT-014`（low 级别），仅作提示，不强制修复。
 
 ---
 
@@ -205,7 +205,40 @@ skill-auditor 会把这类文件标记为 `STRUCT-014`（low 级别），仅作�
 | 示例不可执行 | "运行脚本即可。" | "```bash\npython3 scripts/audit_skill.py /path/to/skill --json\n```" |
 | 错误提示只有代码 | "E_TOO_LARGE" | "这个文件有点大（超过 512 KB）。建议把细节移到 references/，或者调整 config 阈值。" |
 
-如果你不确定自己的写法属于哪一类，直接让 skill-auditor 跑一轮审计，它会标出具体 rule_id。
+如果你不确定自己的写法属于哪一类，直接让 skill-inspector 跑一轮审计，它会标出具体 rule_id。
+
+---
+
+## Q15：安全扫描报了我的示例代码/测试夹具，是误报吗？
+
+大概率是"语境误判"，不是工具坏。两级处理：
+
+1. **先看证据行**：如果该行本身就在讲"反模式 / 别这么写"，扫描器会自动把严重度降一级并标注「示例/反模式语境，请人工确认」——看一眼确认即可，不必改。
+2. **确认要长期豁免**：写抑制标记，别关规则——
+
+   ```text
+   skill-inspector: ignore SEC-001              # 只豁免本行
+   skill-inspector: ignore-file SEC-001,SEC-002 # 豁免整个文件
+   ```
+
+   抑制标记留在代码里可被 review 看见；关整条规则会让同类问题在别处静默通过。
+
+另外记住一条边界：**未命中 ≠ 安全**。正则启发式读不懂"这个脚本实际会做什么"，依赖审计、签名校验、沙箱隔离不在它的能力范围内。
+
+---
+
+## Q16：怎么把 skill-inspector 接进 CI？
+
+两个开关 + 一份 SARIF：
+
+```bash
+python3 scripts/run_all.py . --fail-on high --fail-under 80
+python3 scripts/audit_skill.py . --format sarif > skill-audit.sarif
+```
+
+- `--fail-on high`：出现 high 级发现即失败；`--fail-under 80`：TRACE 低于 80 即失败。
+- 触发时退出码是 **2**，脚本自身崩溃是 **1**，流水线可以分开处理。
+- `.github/workflows/ci.yml` 是现成范例（3 个 Python 版本矩阵 + 门禁 + SARIF 上传）。
 
 ---
 
@@ -220,7 +253,7 @@ SkillHub TRACE 报告给出五个维度（T/R/A/C/E）各 0–5 分。**不要�
 | A（适用性）扣分 | 配置/扩展/触发方式不清 | 加配置示例、扩展钩子说明、触发词映射表 |
 | C（规范性）扣分 | 结构/命名/渐进式披露问题 | 补 frontmatter；细节外置 references/；加目录 |
 | E（有效性）扣分 | 描述与能力不一致/缺交付物 | 让 description 精确匹配实际能力；明确产出物 |
-| 子项写"需额外配置才能测到" | 评测者认为核心功能缺默认路径 | 提供零依赖兜底（如 skill-auditor 的启发式测试模式） |
+| 子项写"需额外配置才能测到" | 评测者认为核心功能缺默认路径 | 提供零依赖兜底（如 skill-inspector 的启发式测试模式） |
 | 子项写"会跳过部分内容" | 采样被感知为功能缺失 | 明确写出"全量浅扫兜底 + 重点段深扫"的覆盖范围 |
 
 **最快验证法**：改完一处后重跑 `python3 scripts/run_all.py .`，看该维度的证据行是否变化——分数是结果，证据才是该改的东西。
@@ -231,4 +264,55 @@ SkillHub TRACE 报告给出五个维度（T/R/A/C/E）各 0–5 分。**不要�
 
 1. 查看 `COOKBOOK.md` 中的完整场景案例；
 2. 查看 `references/` 下的专项规则说明；
-3. 直接对 skill-auditor 说"帮我看看这个报错"或"这个规则是什么意思"。
+3. 直接对 skill-inspector 说"帮我看看这个报错"或"这个规则是什么意思"。
+
+---
+
+## Q18：手上十几个 Skill，怎么一次性审完并知道哪个最差？
+
+用 `batch_audit.py`（并行 + 汇总看板，写脚本循环就不必了）：
+
+```bash
+python3 scripts/batch_audit.py --root ~/.workbuddy/skills --jobs 4
+```
+
+产物 `BATCH-AUDIT.md` 分三块：
+
+1. **总览表**——按 TRACE 从低到高排，一屏看出谁最差；带高/中/低发现数、安全命中、静态通过、耗时。
+2. **共性问题**——同一条规则命中多个技能，说明是写法习惯问题，改一次规范比逐个修省事。
+3. **待修清单**——high/medium 条目按严重度排，带文件与行号。
+
+两个注意点：
+
+- **只读**：批量模式不会在目标目录创建 `.skill-audit/`，也不改文件。要某个技能的完整报告，再单独跑 `run_all.py`。
+- **门禁口径更严**：`--fail-on` 把语义发现（SEM-*）也算进去，比单技能 `run_all` 严格；`--fail-under` 要求**每个**技能都达标，不是看平均分。
+
+实测参考：86 个技能、4 并行，约 35 秒跑完。
+
+---
+
+## Q19：报告说"同义改写疑似重复"，但我觉得两句不一样，怎么判断？
+
+看证据里的「换词」字段，例如 `换词: 校验≈检查、生成≈产出`——只有同时满足三条才会报：
+
+1. 两句话**确实各自用了同义词**（概念归一表里同一组的不同说法）；
+2. 归一化后重叠度 ≥ `thresholds.paraphrase_jaccard`（默认 0.55）；
+3. 两句**极性一致**（一句"必须"一句"禁止"归 SEM-004 冲突，不按重复报）。
+
+处理方式三选一：确实重复就删一条；侧重不同（一句讲条件一句讲动作）就补上区分点；认可这种风格就调高阈值或从 `synonyms` 里删掉那一组。
+
+**边界**：它抓的是术语替换型改写。换句型换语序（"先校验再提交"vs"提交前需校验"）抓不到——那需要 embedding 模型，本工具为保持零依赖刻意不做。
+
+---
+
+## Q20：Windows 上能用吗？需要注意什么？
+
+能。CI 里 `windows-latest` 和 macOS、Ubuntu 跑的是同一份用例，三条已知差异都在代码里处理掉了：
+
+- **编码**：脚本导入时把 stdout/stderr 固定 UTF-8；调子脚本时显式指定 UTF-8 并设 `PYTHONUTF8=1`。
+  你自己写调用方时，`subprocess.run(..., text=True)` 也建议加 `encoding="utf-8"`，
+  否则父进程按本地代码页解码中文 JSON 会失败。
+- **路径分隔符**：内部文件清单一律用 `/`（`C.posix_rel`），报告里的位置、`references/xxx` 引用检查在 Windows 上同样有效。
+- **命令写法**：文档里写的 `python3` 在 Windows 上一般是 `python` 或 `py -3`，换个解释器名即可，脚本本身不依赖 shell。
+
+**没覆盖的**：超过 260 字符的长路径、UNC 网络盘上的技能目录没做专项测试——这类环境建议先把技能拷到本地盘再跑。
